@@ -1,0 +1,17 @@
+
+
+# dependencies
+node_modules/
+
+# env
+.env
+
+# logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+
+# firebase local files
+.firebase/
