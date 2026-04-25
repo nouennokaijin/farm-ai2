@@ -1,56 +1,76 @@
 
 // utils/notion.js
-// 2026/4/24
+// 2026/4/25
 // Kazuo Okiura
 
-// Notion APIにリクエスト送るためのライブラリ
 const axios = require("axios");
 
-// 環境変数からAPIキーとDB IDを取得
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const DATABASE_ID = process.env.NOTION_DATABASE_ID;
 
-// Notionにページを作る関数
-// title: タイトル（必須）
-// content: 今回は未使用（あとで拡張できる
 async function createPage(title, content, tag) {
   console.log("NOTION CONTENT:", content);
-  // Notionに新しいページを作成するリクエスト
+
+  // 現在日時（ISOと日本語表示の両方用意）
+  const nowISO = new Date().toISOString();
+  const nowJP = new Date().toLocaleString("ja-JP");
+
+  // 本文に入れるテキスト（日時付き）
+  const bodyText = `【${nowJP}】\n${content || ""}`;
+
   await axios.post(
     "https://api.notion.com/v1/pages",
     {
-      // どのデータベースに作るか
       parent: { database_id: DATABASE_ID },
 
       properties: {
-        // 「名前」プロパティ（タイトル欄）
+        // タイトル（一覧用）
         名前: {
           title: [
             {
               text: {
-                // タイトルが空なら「無題」を入れる
-                content: title || "無題",
+//                content: title || (content ? content.slice(0, 20) : "無題"),
+content: "テスト投稿",
+
               },
             },
           ],
         },
+
+        // 日付プロパティ（←Notion側で「Date」型にしておく）
+        Date: {
+          date: {
+            start: nowISO,
+          },
+        },
       },
+
+      // 👇 ここが今回のキモ（ページ本文）
+      children: [
+        {
+          object: "block",
+          type: "paragraph",
+          paragraph: {
+            rich_text: [
+              {
+                type: "text",
+                text: {
+                  content: bodyText,
+                },
+              },
+            ],
+          },
+        },
+      ],
     },
     {
       headers: {
-        // 認証ヘッダー（これがないとNotionに拒否される）
         Authorization: `Bearer ${NOTION_API_KEY}`,
-
-        // Notion APIのバージョン指定
         "Notion-Version": "2022-06-28",
-
-        // JSON送信
         "Content-Type": "application/json",
       },
     }
   );
 }
 
-// 他のファイルから使えるようにする
 module.exports = { createPage };
-
