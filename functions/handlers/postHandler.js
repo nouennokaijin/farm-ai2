@@ -5,9 +5,14 @@ async function handlePost(text, tag) {
 
   const title = "LINEからの投稿";
 
-  const cleanText = (text || "").replace("投稿", "").trim();
+  // 「投稿」だけ取り除く（前後どこにあってもOK）
+  const cleanText = (text || "").replace(/投稿/g, "").trim();
 
-  await createPage(title, cleanText || "（内容なし）", tag);
+  // 空ならそのまま分かるようにする
+  const content = cleanText || "（内容なし）";
+
+  // そのまま渡す
+  await createPage(title, content, tag);
 }
 
 module.exports = { handlePost };
