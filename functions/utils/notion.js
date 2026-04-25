@@ -1,3 +1,5 @@
+// notion,js
+
 // utils/notion.js
 
 const axios = require("axios");
@@ -8,6 +10,7 @@ const DATABASE_ID = process.env.NOTION_DATABASE_ID;
 async function createPage(title, content, tag) {
   console.log("NOTION CONTENT:", content);
 
+  const nowISO = new Date().toISOString();
   const nowJP = new Date().toLocaleString("ja-JP");
   const bodyText = `【${nowJP}】\n${content || ""}`;
 
@@ -21,11 +24,18 @@ async function createPage(title, content, tag) {
           title: [
             {
               text: {
-                content: "テスト投稿",
+                content: title || "無題",
               },
             },
           ],
-        }
+        },
+
+        // 👇 ここ追加（プロパティ名はNotionと完全一致）
+        日付: {
+          date: {
+            start: nowISO,
+          },
+        },
       },
 
       children: [
