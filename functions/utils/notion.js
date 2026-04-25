@@ -1,5 +1,3 @@
-// notion,js
-
 // utils/notion.js
 
 const axios = require("axios");
@@ -10,9 +8,17 @@ const DATABASE_ID = process.env.NOTION_DATABASE_ID;
 async function createPage(title, content, tag) {
   console.log("NOTION CONTENT:", content);
 
-  const nowISO = new Date().toISOString();
-  const nowJP = new Date().toLocaleString("ja-JP");
-  const bodyText = `【${nowJP}】\n${content || ""}`;
+  // 🇯🇵 日本時間を正確に生成（ズレ防止）
+  const now = new Date();
+
+  const nowJP = new Date(
+    now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
+  );
+
+  const nowISO = nowJP.toISOString();
+  const displayTime = nowJP.toLocaleString("ja-JP");
+
+  const bodyText = `【${displayTime}】\n${content || ""}`;
 
   await axios.post(
     "https://api.notion.com/v1/pages",
@@ -30,7 +36,6 @@ async function createPage(title, content, tag) {
           ],
         },
 
-        // 👇 ここ追加（プロパティ名はNotionと完全一致）
         日付: {
           date: {
             start: nowISO,
