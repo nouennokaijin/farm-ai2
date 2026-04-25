@@ -1,7 +1,4 @@
-
 // utils/notion.js
-// 2026/4/25
-// Kazuo Okiura
 
 const axios = require("axios");
 
@@ -11,11 +8,7 @@ const DATABASE_ID = process.env.NOTION_DATABASE_ID;
 async function createPage(title, content, tag) {
   console.log("NOTION CONTENT:", content);
 
-  // 現在日時（ISOと日本語表示の両方用意）
-  const nowISO = new Date().toISOString();
   const nowJP = new Date().toLocaleString("ja-JP");
-
-  // 本文に入れるテキスト（日時付き）
   const bodyText = `【${nowJP}】\n${content || ""}`;
 
   await axios.post(
@@ -24,28 +17,17 @@ async function createPage(title, content, tag) {
       parent: { database_id: DATABASE_ID },
 
       properties: {
-        // タイトル（一覧用）
         名前: {
           title: [
             {
               text: {
-//                content: title || (content ? content.slice(0, 20) : "無題"),
-content: "テスト投稿",
-
+                content: "テスト投稿",
               },
             },
           ],
-        },
-
-        // 日付プロパティ（←Notion側で「Date」型にしておく）
-        Date: {
-          date: {
-            start: nowISO,
-          },
-        },
+        }
       },
 
-      // 👇 ここが今回のキモ（ページ本文）
       children: [
         {
           object: "block",
