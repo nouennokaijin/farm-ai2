@@ -55,3 +55,8 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("Server running on port " + PORT);
 });
+
+//
+const { createPage } = require("./utils/notion");
+
+createPage("強制テスト", "これは強制本文テスト");
