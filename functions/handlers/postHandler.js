@@ -1,15 +1,13 @@
 
 // postHandler.js
 
-// const pendingMap = new Map();  //sentakuyou
-
 const { createPage } = require("../utils/notion");
 const {
   buildMemoryContext,
   saveMemory,
 } = require("../utils/brain-memory");
 
-async function handlePost(text, tag) {
+async function handlePost(text, tag, client, replyToken) {
   console.log("handlePost text:", text);
 
   const title = "LINEからの投稿";
@@ -17,19 +15,28 @@ async function handlePost(text, tag) {
   const cleanText = (text || "").replace(/投稿/g, "").trim();
   const content = cleanText || "（内容なし）";
 
-  // ① 記憶を保存（Notion）
+  // ① Notion保存（既存）
   await createPage(title, content, tag);
 
-  // ② brain-memoryにも保存（AI用記憶）
+  // ② AI記憶保存
   await saveMemory({
     title,
     content,
     type: "memory",
   });
 
-  // ③ 必要なら記憶を取得（今はログ用）
+  // ③ 記憶読み込み（将来AI用）
   const memory = await buildMemoryContext();
+
   console.log("memory context:", memory);
+
+  // ④ LINE返信（これ追加）
+  if (client && replyToken) {
+    await client.replyMessage(replyToken, {
+      type: "text",
+      text: "投稿されました",
+    });
+  }
 }
 
 module.exports = { handlePost };
