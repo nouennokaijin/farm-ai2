@@ -1,5 +1,76 @@
 // utils/notion.js
+// 
 
+const axios = require("axios");
+
+const NOTION_API_KEY = process.env.NOTION_API_KEY;
+const DATABASE_ID = process.env.NOTION_DATABASE_ID;
+
+async function createPage(title, content, tag) {
+  const now = new Date();
+
+  const nowJP = new Date(
+    now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
+  );
+
+  const nowISO = nowJP.toISOString();
+
+  const bodyText = `${content || ""}`;
+
+  await axios.post(
+    "https://api.notion.com/v1/pages",
+    {
+      parent: { database_id: DATABASE_ID },
+
+      properties: {
+        名前: {
+          title: [
+            {
+              text: {
+                content: title || "無題",
+              },
+            },
+          ],
+        },
+
+        日付: {
+          date: {
+            start: nowISO,
+          },
+        },
+      },
+
+      children: [
+        {
+          object: "block",
+          type: "paragraph",
+          paragraph: {
+            rich_text: [
+              {
+                type: "text",
+                text: {
+                  content: bodyText,
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${NOTION_API_KEY}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
+
+module.exports = { createPage };
+
+
+/*NOTION memory AI ver 
 const axios = require("axios");
 const { buildMemoryContext } = require("./brain-memory");
 
@@ -79,3 +150,4 @@ async function createPage(title, content, tag) {
 }
 
 module.exports = { createPage };
+*/
