@@ -1,8 +1,9 @@
 // class-ai.js
 
-const groq = require("groq-sdk");
 
-const client = new groq({
+const Groq = require("groq-sdk");
+
+const client = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
@@ -14,39 +15,26 @@ async function aiclass(text) {
       {
         role: "system",
         content: `
-あなたは分類専用AIです。
-必ず以下のどれか1語だけを返してください。
+あなたは分類AI。
+必ず次のいずれか1語のみ返す:
 
 POST
 RECEIPT
 SCHEDULE
 CHAT
 
-他の文章は一切出さないこと。
-        `,
+それ以外は禁止。
+不明な場合はCHAT。
+        `.trim(),
       },
-      {
-        role: "user",
-        content: text,
-      },
+      { role: "user", content: text },
     ],
   });
 
-  return res.choices[0].message.content.trim();
+  return res?.choices?.[0]?.message?.content?.trim() || "POST"; //"CHAT";
 }
 
-function normalizeIntent(intent) {
-  const i = intent.toUpperCase();
-
-  if (i.includes("POST")) return "POST";
-  if (i.includes("RECEIPT")) return "RECEIPT";
-  if (i.includes("SCHEDULE")) return "SCHEDULE";
-  return "CHAT";
-}
-
-async function getIntent(text) {
+module.exports = async function getIntent(text) {
   const raw = await aiclass(text);
-  return normalizeIntent(raw);
-}
-
-module.exports = { getIntent };
+  return raw; // もう正規化いらない設計
+};

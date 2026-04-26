@@ -52,13 +52,13 @@ async function dispatcher(event) {
         return handlePost(text);
 
       case "RECEIPT":
-        return handleReceipt(text);
+        return handlePost(text);  // handleReceipt(text);
 
       case "SCHEDULE":
-        return handleSchedule(text);
+        return handlePost(text);  //handleSchedule(text);
 
       default:
-        return handleChat(text);
+        return handlePost(text);   // handleChat(text);
     }
   }
 
