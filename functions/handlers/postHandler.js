@@ -3,25 +3,57 @@
 
 // postHandler.js
 
-const { createPage } = require("../utils/notion");
+const line = require("@line/bot-sdk");
+const { saveToNotion } = require("../utils/notion");
 
-async function handlePost(text, tag, client, replyToken) {
+// LINEクライアントはここで1回だけ生成（超重要）
+const client = new line.Client({
+  channelAccessToken: process.env.LINE_TOKEN,
+});
+
+/**
+ * LINE投稿ハンドラー
+ * ① LINEへ即返信
+ * ② Notionへ保存
+ */
+async function handlePost(text, tag) {
   console.log("handlePost text:", text);
+  console.log("handlePost tag:", tag);
 
-  const title = "LINEからの投稿";
-
-  const cleanText = (text || "").replace(/投稿/g, "").trim();
-  const content = cleanText || "（内容なし）";
-
-  // LINE即返信（必要なら）
-  if (client && replyToken && typeof client.replyMessage === "function") {
-    await client.replyMessage(replyToken, {
-      type: "text",
-      text: "投稿を受け付けました。",
-    });
+  // ===== guard（事故防止）=====
+  if (!tag) {
+    console.error("tag is undefined");
+    return;
   }
 
-  await createPage(title, content, tag);
+  const replyToken = tag.replyToken;
+
+  if (!replyToken) {
+    console.error("replyToken is missing");
+    return;
+  }
+
+  // ===== ① LINE返信（最優先）=====
+  try {
+    await client.replyMessage(replyToken, {
+      type: "text",
+      text: "投稿したよ",
+    });
+  } catch (err) {
+    console.error("LINE reply error:", err);
+    // ここで止めない（Notionは動かす）
+  }
+
+  // ===== ② Notion保存（後処理）=====
+  try {
+    // LINE遅延防止のため非同期でもOK
+    setImmediate(async () => {
+      await saveToNotion(text);
+      console.log("Notion saved");
+    });
+  } catch (err) {
+    console.error("Notion error:", err);
+  }
 }
 
 module.exports = { handlePost };
