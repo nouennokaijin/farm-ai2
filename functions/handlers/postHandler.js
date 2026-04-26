@@ -3,13 +3,15 @@
 
 // postHandler.js
 
-const line = require("@line/bot-sdk");
 const { saveToNotion } = require("../utils/notion");
 
 // LINEクライアントはここで1回だけ生成（超重要）
-const client = new line.Client({
+const line = require("@line/bot-sdk");
+
+const client = new line.messagingApi.MessagingApiClient({
   channelAccessToken: process.env.LINE_TOKEN,
 });
+
 
 /**
  * LINE投稿ハンドラー
