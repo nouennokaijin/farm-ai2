@@ -1,55 +1,22 @@
 // dispatcher.js
 // 2026/4/25
 
-const axios = require("axios");
-
 const { handlePost } = require("../handlers/postHandler");
-const { handleReceipt } = require("../handlers/receiptHandler");
-const { handleOther } = require("../handlers/otherHandler");
+const { handleChat } = require("../handlers/chatHandler"); // 追加
 
-const LINE_TOKEN = process.env.LINE_TOKEN;
+function dispatch(event) {
+  if (event.type !== "message") return;
 
-async function dispatch(message, event) {
-  const replyToken = event?.replyToken;
+  const text = event.message?.text || "";
 
-  if (!message || !replyToken) return;
-
-  // 共通返信
-  const reply = async (text) => {
-    await axios.post(
-      "https://api.line.me/v2/bot/message/reply",
-      {
-        replyToken,
-        messages: [{ type: "text", text }],
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${LINE_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-  };
-
-  if (message.includes("投稿")) {
-//    await reply("投稿を受け付けました。"); //
-    await handlePost(message, "post"); // Notionだけ
-    return;
+  // 👉「投稿」がある時だけ投稿処理
+  if (text.includes("投稿")) {
+    return handlePost(event);
   }
 
-  if (message.includes("レシート")) {
-    await handleReceipt(message);
-//    await reply("レシート受け付けました。");
-    return;
-  }
-
-  if (message.includes("農業")) {
- //   await reply("農業AIは未実装です🌱");
-    return;
-  }
-
-  await handleOther(message);
-//  await reply("処理しました");
+  // 👉それ以外は全部チャット扱い
+    return handleChat(event);
 }
 
 module.exports = { dispatch };
+
