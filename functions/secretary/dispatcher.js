@@ -23,7 +23,7 @@ module.exports = { dispatch };
 */
 // dispatcher.js
 
-const { getIntent } = require("class-ai");
+const { getIntent } = require("./class-ai");
 
 const { handlePost } = require("../handlers/postHandler");
 const { handleReceipt } = require("../handlers/receiptHandler");
