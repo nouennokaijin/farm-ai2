@@ -26,21 +26,8 @@ app.post("/webhook", async (req, res) => {
 
       const userMessage = event.message.text;
 
-      const replyText = await dispatch(userMessage);
-
-      await axios.post(
-        "https://api.line.me/v2/bot/message/reply",
-        {
-          replyToken: event.replyToken,
-          messages: [{ type: "text", text: replyText || "OK" }],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${LINE_TOKEN}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      // 👉 LINEのreplyはdispatcherでやるのでeventごと渡す
+      await dispatch(userMessage, event, LINE_TOKEN);
     }
 
     res.sendStatus(200);
@@ -59,4 +46,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("Server running on port " + PORT);
 });
-

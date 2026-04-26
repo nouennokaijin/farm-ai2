@@ -1,53 +1,72 @@
 // dispatcher.js
 // 2026/4/25
 
+const axios = require("axios");
+
 const { handlePost } = require("../handlers/postHandler");
 const { handleReceipt } = require("../handlers/receiptHandler");
 const { handleOther } = require("../handlers/otherHandler");
 
-async function dispatch(message, event, client) {
-  const replyToken = event.replyToken;
+async function dispatch(message, event, LINE_TOKEN) {
+  const replyToken = event?.replyToken;
 
-  // ガード（安全対策）
-  if (!message) {
-    await client.replyMessage(replyToken, {
-      type: "text",
-      text: "メッセージが空です",
-    });
+  // ガード
+  if (!message || !replyToken) {
+    console.error("Missing message or replyToken");
     return;
   }
 
+  // LINE返信関数（共通化）
+  const reply = async (text) => {
+    await axios.post(
+      "https://api.line.me/v2/bot/message/reply",
+      {
+        replyToken,
+        messages: [{ type: "text", text }],
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${LINE_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+  };
+
   // =========================
-  // 📝 投稿系
+  // 📝 投稿
   // =========================
   if (message.includes("投稿")) {
-    await handlePost(message, "post", client, replyToken);
+    await handlePost(message, "post", replyToken);
+
+    await reply("投稿を受け付けました。");
     return;
   }
 
   // =========================
-  // 🧾 レシート系（画像想定は別ルートでもOK）
+  // 🧾 レシート（未実装）
   // =========================
   if (message.includes("レシート")) {
-    await handleReceipt(message, client, replyToken);
+    await handleReceipt(message, replyToken);
+
+    await reply("レシート処理を受け付けました。");
     return;
   }
 
   // =========================
-  // 🌱 農業・その他AI投稿（未実装プレースホルダ）
+  // 🌱 農業AI（未実装）
   // =========================
   if (message.includes("農業")) {
-    await client.replyMessage(replyToken, {
-      type: "text",
-      text: "農業AI処理はまだ未実装だよ🌱",
-    });
+    await reply("農業AIはまだ未実装です🌱");
     return;
   }
 
   // =========================
-  // ❓ その他
+  // 🧠 その他
   // =========================
-  await handleOther(message, client, replyToken);
+  await handleOther(message, replyToken);
+
+  await reply("処理しました");
 }
 
 module.exports = { dispatch };
