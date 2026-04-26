@@ -9,7 +9,7 @@ const client = new Groq({
 
 async function aiclass(text) {
   const res = await client.chat.completions.create({
-    model: "llama-3.1-70b-versatile",
+    model: "llama-3.1-8b-instant",
     temperature: 0,
     messages: [
       {
