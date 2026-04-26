@@ -1,15 +1,21 @@
+const client = require("../utils/lineClient");
+
 async function handleChat(event) {
   const replyToken = event.replyToken;
-  const text = event.message.text;
+  const text = event.message?.text || "";
 
-  if (!replyToken) {
-    console.log("replyToken missing");
-    return;
-  }
+  console.log("chat:", text);
 
-  await client.replyMessage(replyToken, {
-    type: "text",
-    text: `🟢普通チャットとして受け取ったよ\n\n${text}`
+  if (!replyToken) return;
+
+  return client.replyMessage({
+    replyToken,
+    messages: [
+      {
+        type: "text",
+        text: `💬チャットだよ\n\n${text}`,
+      },
+    ],
   });
 }
 
