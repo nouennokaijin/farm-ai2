@@ -20,7 +20,8 @@ app.post("/webhook", async (req, res) => {
 
       const userMessage = event.message.text;
 
-      await dispatch(userMessage, event);
+//      await dispatch(userMessage, event);
+      await dispatch(event);
     }
 
     res.sendStatus(200);
