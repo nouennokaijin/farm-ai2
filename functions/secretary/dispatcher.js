@@ -23,12 +23,12 @@ module.exports = { dispatch };
 */
 // dispatcher.js
 
-const { getIntent } = require("./class-ai");
+const { getIntent } = require("class-ai");
 
-const { handlePost } = require("./handlers/postHandler");
-const { handleReceipt } = require("./handlers/receiptHandler");
-const { handleSchedule } = require("./handlers/scheduleHandler");
-const { handleChat } = require("./handlers/chatHandler");
+const { handlePost } = require("../handlers/postHandler");
+const { handleReceipt } = require("../handlers/receiptHandler");
+const { handleSchedule } = require("../handlers/scheduleHandler");
+const { handleChat } = require("../handlers/chatHandler");
 
 async function dispatcher(event) {
   const { type, message } = event;
