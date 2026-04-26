@@ -6,9 +6,10 @@
 const { saveToNotion } = require("../utils/notion");
 const line = require("@line/bot-sdk");
 
-const client = new line.messagingApi.MessagingApiClient({
-  channelAccessToken: process.env.LINE_TOKEN,
-});
+const client = require("../utils/lineClient");
+//const client = new line.messagingApi.MessagingApiClient({
+//  channelAccessToken: process.env.LINE_TOKEN,
+//});
 
 async function handlePost(event) {
   const text = event.message?.text || "";
