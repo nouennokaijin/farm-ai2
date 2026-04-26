@@ -3,13 +3,10 @@
 
 // postHandler.js
 
-const { saveToNotion } = require("../utils/notion");
-const line = require("@line/bot-sdk");
+//const line = require("@line/bot-sdk");
 
 const client = require("../utils/lineClient");
-//const client = new line.messagingApi.MessagingApiClient({
-//  channelAccessToken: process.env.LINE_TOKEN,
-//});
+const { createPage } = require("../utils/notion");
 
 async function handlePost(event) {
   const text = event.message?.text || "";
@@ -18,10 +15,7 @@ async function handlePost(event) {
   console.log("handlePost text:", text);
   console.log("replyToken:", replyToken);
 
-  if (!replyToken) {
-    console.error("replyToken is missing");
-    return;
-  }
+  if (!replyToken) return;
 
   // LINE返信
   try {
@@ -41,7 +35,7 @@ async function handlePost(event) {
   // Notion保存（非同期）
   setImmediate(async () => {
     try {
-      await saveToNotion(text);
+      await createPage("LINE投稿", text);
       console.log("Notion saved");
     } catch (err) {
       console.error("Notion error:", err);
