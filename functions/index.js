@@ -3,7 +3,7 @@
 // Okiura Kazuo
 
 const express = require("express");
-const { dispatch } = require("./secretary/dispatcher");
+const dispatch = require("./secretary/dispatcher");
 require("dotenv").config();
 
 const app = express();
