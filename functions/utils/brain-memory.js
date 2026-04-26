@@ -15,7 +15,6 @@ async function fetchMemory(limit = 10) {
   });
 
   return res.results.map((page) => ({
-    id: page.id,
     title: page.properties?.名前?.title?.[0]?.plain_text || "",
     content: page.properties?.内容?.rich_text?.[0]?.plain_text || "",
   }));
@@ -27,8 +26,4 @@ async function buildMemoryContext(limit = 10) {
   return memories.map(m => `- ${m.title}: ${m.content}`).join("\n");
 }
 
-module.exports = {
-  fetchMemory,
-  buildMemoryContext,
-};
-
+module.exports = { fetchMemory, buildMemoryContext };

@@ -1,3 +1,7 @@
+// index.js
+// 2026/4/25
+// Okiura Kazuo
+
 const express = require("express");
 const axios = require("axios");
 const { dispatch } = require("./secretary/dispatcher");
