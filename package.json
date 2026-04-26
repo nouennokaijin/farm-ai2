@@ -1,14 +1,16 @@
 {
-  "dependencies": {
-    "@line/bot-sdk": "^11.0.0",
-    "express": "^5.2.1"
-  },
   "name": "farm-git",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "type": "commonjs",
   "scripts": {
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@line/bot-sdk": "^11.0.0",
+    "express": "^5.2.1"
   },
   "repository": {
     "type": "git",
@@ -17,7 +19,6 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/nouennokaijin/farm-ai2/issues"
   },
