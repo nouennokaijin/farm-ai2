@@ -69,4 +69,4 @@ async function dispatcher(event) {
   }
 }
 
-module.exports = { dispatcher };
+module.exports = dispatcher;
