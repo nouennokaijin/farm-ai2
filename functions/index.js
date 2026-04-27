@@ -1,6 +1,6 @@
 // index.js
-// 2026/4/25
-// Okiura Kazuo
+// 2026/4/27
+// okiura kazuo
 
 const express = require("express");
 const dispatch = require("./secretary/dispatcher");
@@ -16,11 +16,6 @@ app.post("/webhook", async (req, res) => {
     if (!Array.isArray(events)) return res.sendStatus(200);
 
     for (const event of events) {
-      if (event.type !== "message" || event.message.type !== "text") continue;
-
-      const userMessage = event.message.text;
-
-//      await dispatch(userMessage, event);
       await dispatch(event);
     }
 
@@ -31,5 +26,8 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-app.listen(process.env.PORT || 3000);
-
+// Render対策（重要）
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log("server running on", PORT);
+});
