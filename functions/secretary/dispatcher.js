@@ -9,11 +9,27 @@ const { handleReceipt } = require("../handlers/receiptHandler");
 const { handleSchedule } = require("../handlers/scheduleHandler");
 const { handleChat } = require("../handlers/chatHandler");
 
+// Groqクライアント
 const client = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+// ===== 状態管理 =====
+
+// 直前画像（1枚だけ保持）
+const pendingImageMap = new Map();
+
+// セッション管理（xポ〜zぽ）
+const sessionMap = new Map();
+
+// 画像→テキストの許容時間（1分）
+const IMAGE_TTL = 60 * 1000;
+
+// セッション最大時間（5分）
+const SESSION_TTL = 5 * 60 * 1000;
+
 // ===== AI分類 =====
+// 最後の手段としてのみ使用（コスト節約）
 async function classify(text) {
   try {
     const res = await client.chat.completions.create({
@@ -23,7 +39,7 @@ async function classify(text) {
         {
           role: "system",
           content:
-            "POST / RECEIPT / SCHEDULE / CHAT のどれか1語だけ返す。不明はCHAT。",
+            "あなたは分類AI。必ずPOST / RECEIPT / SCHEDULE / CHATのどれか1語だけ返す。不明はCHAT。",
         },
         { role: "user", content: text },
       ],
@@ -39,29 +55,130 @@ async function classify(text) {
 // ===== dispatcher =====
 async function dispatcher(event) {
   try {
+    // messageイベント以外は無視
     if (!event || event.type !== "message") return;
 
     const message = event.message;
     const replyToken = event.replyToken;
+    const userId = event.source?.userId;
 
-    if (!message || !replyToken) return;
+    // 必須情報チェック
+    if (!message || !replyToken || !userId) return;
 
-    // TEXT
+    // ===== 状態ログ =====
+    console.log("STATE", {
+      hasPending: pendingImageMap.has(userId),
+      hasSession: sessionMap.has(userId),
+    });
+
+    // =========================
+    // 🖼️ 画像処理
+    // =========================
+    if (message.type === "image") {
+      const session = sessionMap.get(userId);
+
+      // セッション中なら蓄積
+      if (session && session.active) {
+        session.images.push(message.id);
+        return;
+      }
+
+      // 通常モード：常に上書き（1枚のみ保持）
+      pendingImageMap.set(userId, {
+        imageId: message.id,
+        timestamp: Date.now(),
+      });
+
+      return;
+    }
+
+    // =========================
+    // 📝 テキスト処理
+    // =========================
     if (message.type === "text") {
       const text = message.text || "";
 
+      // =========================
+      // 🟣 セッション開始（xポ）
+      // =========================
+      if (text.startsWith("xポ")) {
+        sessionMap.set(userId, {
+          active: true,
+          texts: [],
+          images: [],
+          startedAt: Date.now(),
+        });
+
+        // 余計な画像をリセット
+        pendingImageMap.delete(userId);
+
+        return;
+      }
+
+      // =========================
+      // 🟣 セッション中処理
+      // =========================
+      const session = sessionMap.get(userId);
+
+      if (session && session.active) {
+        // タイムアウト処理
+        if (Date.now() - session.startedAt > SESSION_TTL) {
+          sessionMap.delete(userId);
+          console.log("session timeout");
+        } else {
+          // 終了（zぽ）
+          if (text.includes("zぽ")) {
+            session.texts.push(text.replace("zぽ", "").trim());
+
+            sessionMap.delete(userId);
+
+            return handlePost({
+              text: session.texts.join("\n"),
+              imageIds: session.images,
+              replyToken,
+            });
+          }
+
+          // 途中テキスト追加
+          session.texts.push(text);
+          return;
+        }
+      }
+
+      // =========================
+      // 🟢 画像＋テキスト結合（1分以内）
+      // =========================
+      const pending = pendingImageMap.get(userId);
+
+      if (pending && Date.now() - pending.timestamp < IMAGE_TTL) {
+        // 使用後は削除（事故防止）
+        pendingImageMap.delete(userId);
+
+        return handlePost({
+          text,
+          imageIds: [pending.imageId],
+          replyToken,
+        });
+      }
+
+      // =========================
+      // 🟢 明示ルール（AI使わない）
+      // =========================
       if (text.includes("投稿")) {
         return handlePost({ text, replyToken });
       }
 
       if (text.includes("レシート")) {
-        return handleReceipt({ text: message.id, replyToken });
+        return handleReceipt({ text, replyToken });
       }
 
       if (text.includes("予定")) {
         return handleSchedule({ text, replyToken });
       }
 
+      // =========================
+      // 🤖 AI分類（最後に実行して節約）
+      // =========================
       const intent = await classify(text);
 
       switch (intent) {
@@ -69,7 +186,7 @@ async function dispatcher(event) {
           return handlePost({ text, replyToken });
 
         case "RECEIPT":
-          return handleReceipt({ text: message.id, replyToken });
+          return handleReceipt({ text, replyToken });
 
         case "SCHEDULE":
           return handleSchedule({ text, replyToken });
@@ -78,15 +195,9 @@ async function dispatcher(event) {
           return handleChat({ text, replyToken });
       }
     }
-
-    // IMAGE
-    if (message.type === "image") {
-      return handleReceipt({ text: message.id, replyToken });
-    }
   } catch (err) {
     console.error("dispatcher error:", err);
   }
 }
 
 module.exports = dispatcher;
-
