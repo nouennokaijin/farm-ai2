@@ -1,23 +1,14 @@
-
 // postHandler.js
-
-// postHandler.js
-
-//const line = require("@line/bot-sdk");
 
 const client = require("../utils/lineClient");
 const { createPage } = require("../utils/notion");
 
-async function handlePost(event) {
-  const text = event.message?.text || "";
-  const replyToken = event.replyToken;
-
+async function handlePost({ text, replyToken }) {
   console.log("handlePost text:", text);
   console.log("replyToken:", replyToken);
 
   if (!replyToken) return;
 
-  // LINE返信
   try {
     await client.replyMessage({
       replyToken,
@@ -32,7 +23,7 @@ async function handlePost(event) {
     console.error("LINE reply error:", err);
   }
 
-  // Notion保存（非同期）
+  // Notion保存（notion.js仕様に完全一致）
   setImmediate(async () => {
     try {
       await createPage("LINE投稿", text);

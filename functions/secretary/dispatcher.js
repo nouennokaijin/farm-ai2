@@ -1,7 +1,4 @@
 // dispatcher.js
-// 2026/4/25
-
-// dispatcher.js
 // 2026/04/27
 
 const Groq = require("groq-sdk");
@@ -12,7 +9,6 @@ const { handleReceipt } = require("../handlers/receiptHandler");
 const { handleSchedule } = require("../handlers/scheduleHandler");
 const { handleChat } = require("../handlers/chatHandler");
 
-// Groq client
 const client = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
@@ -27,7 +23,7 @@ async function classify(text) {
         {
           role: "system",
           content:
-            "あなたは分類AI。必ず次のいずれか1語のみ返す: POST / RECEIPT / SCHEDULE / CHAT。不明な場合はCHAT。",
+            "POST / RECEIPT / SCHEDULE / CHAT のどれか1語だけ返す。不明はCHAT。",
         },
         { role: "user", content: text },
       ],
@@ -40,7 +36,7 @@ async function classify(text) {
   }
 }
 
-// ===== dispatcher本体 =====
+// ===== dispatcher =====
 async function dispatcher(event) {
   try {
     if (!event || event.type !== "message") return;
@@ -48,41 +44,49 @@ async function dispatcher(event) {
     const message = event.message;
     const replyToken = event.replyToken;
 
-    if (!message) return;
+    if (!message || !replyToken) return;
 
-    // ===== text =====
+    // TEXT
     if (message.type === "text") {
       const text = message.text || "";
 
-      if (text.includes("投稿")) return handlePost(text, replyToken);
-      if (text.includes("レシート")) return handleReceipt(text, replyToken);
-      if (text.includes("予定")) return handleSchedule(text, replyToken);
+      if (text.includes("投稿")) {
+        return handlePost({ text, replyToken });
+      }
+
+      if (text.includes("レシート")) {
+        return handleReceipt({ text: message.id, replyToken });
+      }
+
+      if (text.includes("予定")) {
+        return handleSchedule({ text, replyToken });
+      }
 
       const intent = await classify(text);
 
       switch (intent) {
         case "POST":
-          return handlePost(text, replyToken);
+          return handlePost({ text, replyToken });
 
         case "RECEIPT":
-          return handleReceipt(text, replyToken);
+          return handleReceipt({ text: message.id, replyToken });
 
         case "SCHEDULE":
-          return handleSchedule(text, replyToken);
+          return handleSchedule({ text, replyToken });
 
         default:
-          return handleChat(text, replyToken);
+          return handleChat({ text, replyToken });
       }
     }
 
-    // ===== image =====
+    // IMAGE
     if (message.type === "image") {
-      return handleReceipt(message.id, replyToken);
+      return handleReceipt({ text: message.id, replyToken });
     }
   } catch (err) {
     console.error("dispatcher error:", err);
   }
 }
 
-// ⭐これが抜けてたのが原因
 module.exports = dispatcher;
+
