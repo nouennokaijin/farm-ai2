@@ -12,6 +12,7 @@
     "@line/bot-sdk": "^11.0.0",
     "axios": "^1.15.2",
     "express": "^5.2.1",
+    "googleapis": "^171.4.0",
     "groq-sdk": "^1.1.2"
   },
   "repository": {
