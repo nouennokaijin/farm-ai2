@@ -3,20 +3,20 @@
 
 const Groq = require("groq-sdk");
 
-// handlers
+// ===== handlers =====
 const { handlePost } = require("../handlers/postHandler");
 const { handleReceipt } = require("../handlers/receiptHandler");
 const { handleSchedule } = require("../handlers/scheduleHandler");
 const { handleChat } = require("../handlers/chatHandler");
 
-// Groqクライアント
+// ===== Groqクライアント =====
 const client = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
 // ===== 状態管理 =====
 
-// 直前画像（1枚だけ保持）
+// 直前画像（1ユーザー1枚）
 const pendingImageMap = new Map();
 
 // セッション管理（xポ〜zぽ）
@@ -29,7 +29,6 @@ const IMAGE_TTL = 60 * 1000;
 const SESSION_TTL = 5 * 60 * 1000;
 
 // ===== AI分類 =====
-// 最後の手段としてのみ使用（コスト節約）
 async function classify(text) {
   try {
     const res = await client.chat.completions.create({
@@ -39,13 +38,14 @@ async function classify(text) {
         {
           role: "system",
           content:
-            "あなたは分類AI。必ずPOST / RECEIPT / SCHEDULE / CHATのどれか1語だけ返す。不明はCHAT。",
+            "POST / RECEIPT / SCHEDULE / CHAT のいずれか1語だけ返す。不明はCHAT。",
         },
         { role: "user", content: text },
       ],
     });
 
     return res?.choices?.[0]?.message?.content?.trim() || "CHAT";
+
   } catch (e) {
     console.error("AI classify error:", e);
     return "CHAT";
@@ -62,7 +62,7 @@ async function dispatcher(event) {
     const replyToken = event.replyToken;
     const userId = event.source?.userId;
 
-    // 必須情報チェック
+    // 必須チェック
     if (!message || !replyToken || !userId) return;
 
     // ===== 状態ログ =====
@@ -72,18 +72,36 @@ async function dispatcher(event) {
     });
 
     // =========================
+    // 🎥 動画 → 完全無視
+    // =========================
+    if (message.type === "video") {
+      return;
+    }
+
+    // =========================
+    // 📎 ファイル → 即処理
+    // =========================
+    if (message.type === "file") {
+      return handlePost({
+        text: "ファイル受信",
+        fileIds: [message.id],
+        replyToken,
+      });
+    }
+
+    // =========================
     // 🖼️ 画像処理
     // =========================
     if (message.type === "image") {
       const session = sessionMap.get(userId);
 
-      // セッション中なら蓄積
+      // セッション中なら画像を蓄積
       if (session && session.active) {
         session.images.push(message.id);
         return;
       }
 
-      // 通常モード：常に上書き（1枚のみ保持）
+      // 通常モード：1枚だけ保持
       pendingImageMap.set(userId, {
         imageId: message.id,
         timestamp: Date.now(),
@@ -99,7 +117,7 @@ async function dispatcher(event) {
       const text = message.text || "";
 
       // =========================
-      // 🟣 セッション開始（xポ）
+      // セッション開始（xポ）
       // =========================
       if (text.startsWith("xポ")) {
         sessionMap.set(userId, {
@@ -109,19 +127,19 @@ async function dispatcher(event) {
           startedAt: Date.now(),
         });
 
-        // 余計な画像をリセット
+        // 古い画像削除
         pendingImageMap.delete(userId);
 
         return;
       }
 
       // =========================
-      // 🟣 セッション中処理
+      // セッション中
       // =========================
       const session = sessionMap.get(userId);
 
       if (session && session.active) {
-        // タイムアウト処理
+        // タイムアウト
         if (Date.now() - session.startedAt > SESSION_TTL) {
           sessionMap.delete(userId);
           console.log("session timeout");
@@ -146,12 +164,11 @@ async function dispatcher(event) {
       }
 
       // =========================
-      // 🟢 画像＋テキスト結合（1分以内）
+      // 🖼️＋📝（1分以内）
       // =========================
       const pending = pendingImageMap.get(userId);
 
       if (pending && Date.now() - pending.timestamp < IMAGE_TTL) {
-        // 使用後は削除（事故防止）
         pendingImageMap.delete(userId);
 
         return handlePost({
@@ -162,7 +179,7 @@ async function dispatcher(event) {
       }
 
       // =========================
-      // 🟢 明示ルール（AI使わない）
+      // 明示ルール（AI使わない）
       // =========================
       if (text.includes("投稿")) {
         return handlePost({ text, replyToken });
@@ -177,7 +194,7 @@ async function dispatcher(event) {
       }
 
       // =========================
-      // 🤖 AI分類（最後に実行して節約）
+      // 🤖 AI分類
       // =========================
       const intent = await classify(text);
 
@@ -195,6 +212,7 @@ async function dispatcher(event) {
           return handleChat({ text, replyToken });
       }
     }
+
   } catch (err) {
     console.error("dispatcher error:", err);
   }
