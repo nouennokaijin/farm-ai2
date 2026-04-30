@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "dotenv": "^17.4.2",
-    "firebase-admin": "^13.8.0"
-  }
-}
