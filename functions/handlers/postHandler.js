@@ -4,89 +4,109 @@ const client = require("../utils/lineClient");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 
 const { downloadLineMedia } = require("../utils/lineMedia");
-const { uploadToDrive } = require("../utils/drive");
+
+// ===== Firebaseアップロード =====
+const { uploadToFirebase } = require("../utils/firebaseUpload");
+
 const { generateTags } = require("../utils/tagger");
-const { extractTextFromImage } = require("../utils/ocr"); // ★OCR追加
+const { extractTextFromImage } = require("../utils/ocr");
 
 // ===== 投稿処理 =====
-async function handlePost({ text = "", replyToken, imageIds = [], fileIds = [] }) {
+async function handlePost({
+  text = "",
+  replyToken,
+  imageIds = [],
+  fileIds = [],
+}) {
   console.log("handlePost:", text);
 
   try {
-    // ===== テキスト保険 =====
+    // ===== テキスト安全化 =====
     const safeText = text && text.trim() !== "" ? text : "（テキストなし）";
 
-    // ===== Driveアップ（並列）=====
+    // =====================================================
+    // 📦 Firebaseアップロード処理（並列）
+    // =====================================================
     const uploadTasks = [];
 
-    // 画像
+    // ===== 画像処理 =====
     for (const id of imageIds) {
       uploadTasks.push(
         (async () => {
           const buffer = await downloadLineMedia(id);
           if (!buffer) return null;
 
-          return await uploadToDrive(
+          // ★同一時刻ズレ防止のためここで固定
+          const now = Date.now();
+
+          return await uploadToFirebase(
             buffer,
-            `img_${Date.now()}_${id}.jpg`,
+            `img_${now}_${id}.jpg`,
             "image/jpeg"
           );
         })()
       );
     }
 
-    // ファイル
+    // ===== ファイル処理 =====
     for (const id of fileIds) {
       uploadTasks.push(
         (async () => {
           const buffer = await downloadLineMedia(id);
           if (!buffer) return null;
 
-          return await uploadToDrive(
+          const now = Date.now();
+
+          return await uploadToFirebase(
             buffer,
-            `file_${Date.now()}_${id}`,
+            `file_${now}_${id}`,
             "application/octet-stream"
           );
         })()
       );
     }
 
-    // 並列実行
+    // ===== 並列実行 =====
     const results = await Promise.all(uploadTasks);
-
-    // null除去
     const fileUrls = results.filter(Boolean);
+
     console.log("uploaded files:", fileUrls);
 
-    // ===== OCR（画像のみ対象）=====
+    // =====================================================
+    // 🔍 OCR処理（Firebase URL前提）
+    // =====================================================
     let ocrText = "";
 
     for (const url of fileUrls) {
-      // 軽い判定（Drive URL + 拡張子）
-      if (url.includes("id=")) {
-        try {
-          const extracted = await extractTextFromImage(url);
+      try {
+        // ★Firebase Storage URLだけ対象にする
+        if (!url || !url.includes("storage.googleapis.com")) continue;
 
-          if (extracted && extracted.trim()) {
-            ocrText += "\n[OCR]\n" + extracted;
-          }
-        } catch (err) {
-          console.error("OCR error:", err);
+        const extracted = await extractTextFromImage(url);
+
+        if (extracted && extracted.trim()) {
+          ocrText += "\n[OCR]\n" + extracted;
         }
+
+      } catch (err) {
+        // OCR失敗しても全体は止めない
+        console.error("OCR error:", err);
       }
     }
 
-    // ===== テキスト統合 =====
+    // ===== 最終テキスト統合 =====
     const finalText = safeText + (ocrText ? "\n\n" + ocrText : "");
 
     console.log("finalText:", finalText);
 
-    // ===== タグ生成（OCR後にやるのが重要）=====
+    // ===== タグ生成 =====
     const tags = await generateTags(finalText);
-    console.log("tags:", tags);
 
-    // ===== LINE返信 =====
-    if (replyToken) {
+    // =====================================================
+    // 📱 LINE返信（即時レスポンス）
+    // =====================================================
+/* 
+   if (replyToken) {
       try {
         await client.replyMessage({
           replyToken,
@@ -101,13 +121,15 @@ async function handlePost({ text = "", replyToken, imageIds = [], fileIds = [] }
         console.error("LINE reply error:", err);
       }
     }
-
-    // ===== Notion保存（非同期）=====
+*/
+    // =====================================================
+    // 🧾 Notion保存（非同期）
+    // =====================================================
     setImmediate(async () => {
       try {
         await saveMsgToNotion({
           title: "LINE投稿",
-          content: finalText, // ★OCR込み
+          content: finalText,
           tags,
           files: fileUrls,
         });
