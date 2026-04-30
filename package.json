@@ -1,0 +1,16 @@
+{
+  "name": "farm-ai2",
+  "version": "1.0.0",
+  "main": "functions/index.js",
+  "scripts": {
+    "start": "node functions/index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.3",
+    "groq-sdk": "^0.8.0",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
