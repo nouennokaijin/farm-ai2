@@ -4,7 +4,7 @@
 
 // index.js
 // 2026/4/25
-/*
+
 const express = require("express");
 const dispatch = require("./secretary/dispatcher");
 require("dotenv").config();
@@ -49,13 +49,4 @@ const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log("server running on", PORT);
 });
-*/
-const express = require("express");
-const app = express();
 
-app.get("/", (req, res) => {
-  res.send("OK");
-});
-
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("running"));
