@@ -1,4 +1,4 @@
-// utils/lineMedia.js
+y// utils/lineMedia.js
 
 const axios = require("axios");
 
@@ -16,7 +16,7 @@ async function downloadLineMedia(messageId) {
       {
         responseType: "arraybuffer", // バイナリで取得
         headers: {
-          Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+ Authorization: `Bearer ${process.env.LINE_TOKEN}`,  //         Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
         },
         timeout: 15000, // ★追加：タイムアウト（ハング防止）
       }
