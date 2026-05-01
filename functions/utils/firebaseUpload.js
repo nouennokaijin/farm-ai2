@@ -2,9 +2,9 @@
 
 // ===== Firebase Adminからバケット取得 =====
 // ※ firebase.js → firebaseAdmin.js にリネーム済み前提
-const { bucket } = require("./firebaseAdmin");
+//const { bucket } = require("./firebaseAdmin");
 
-const crypto = require("crypto");
+//const crypto = require("crypto");
 
 // ===== Firebase Storageへアップロード =====
 // buffer   : LINEから取得したバイナリ
@@ -42,7 +42,7 @@ async function uploadToFirebase(buffer, fileName, mimeType = "image/jpeg") {
 
     // ===== 公開URL生成 =====
     // Google Storage標準形式
-    const url = `https://storage.googleapis.com/${bucket.name}/${safeName}`;
+  //  const url = `https://storage.googleapis.com/${bucket.name}/${safeName}`;
 
     return url;
 

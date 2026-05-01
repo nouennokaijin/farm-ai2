@@ -1,6 +1,6 @@
 // utils/firebaseAdmin.js
 
-const admin = require("firebase-admin");
+//const admin = require("firebase-admin");
 
 // ===== Firebase Admin 初期化（1回だけ）=====
 if (!admin.apps.length) {
@@ -13,6 +13,6 @@ if (!admin.apps.length) {
 }
 
 // ===== Storageバケット取得 =====
-const bucket = admin.storage().bucket();
+//const bucket = admin.storage().bucket();
 
 module.exports = { bucket };
