@@ -8,6 +8,7 @@
   "dependencies": {
     "@line/bot-sdk": "^11.0.0",
     "axios": "^1.15.2",
+    "cloudinary": "^2.10.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "firebase-admin": "^13.8.0",
