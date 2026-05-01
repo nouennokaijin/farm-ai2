@@ -1,18 +1,24 @@
 // utils/firebaseAdmin.js
 
-//const admin = require("firebase-admin");
+// ===== Firebase Admin SDK 読み込み =====
+const admin = require("firebase-admin");
 
-// ===== Firebase Admin 初期化（1回だけ）=====
+// ===== 環境変数からサービスアカウント取得 =====
+// ※ JSON文字列として.envに入れてる前提
+const serviceAccount = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+
+// ===== 初期化（多重初期化防止）=====
 if (!admin.apps.length) {
   admin.initializeApp({
-    credential: admin.credential.cert(
-      JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-    ),
+    credential: admin.credential.cert(serviceAccount),
+
+    // 🔽ここ重要（Storage使うなら必須）
     storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
   });
 }
 
-// ===== Storageバケット取得 =====
-//const bucket = admin.storage().bucket();
+// ===== バケット取得 =====
+const bucket = admin.storage().bucket();
 
-module.exports = { bucket };
+// ===== export =====
+module.exports = { admin, bucket };
