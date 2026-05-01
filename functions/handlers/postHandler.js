@@ -1,4 +1,7 @@
-const client = require("../utils/lineClient");
+// handlers/postHandler.js
+// 2026/5/2
+// Okiura Kazuo
+
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 
 const { downloadLineMedia } = require("../utils/lineMedia");
