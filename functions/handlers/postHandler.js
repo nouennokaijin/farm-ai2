@@ -4,8 +4,6 @@
 
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 
-const { downloadLineMedia } = require("../utils/lineMedia");
-
 // ================================
 // 🔥 Firebase → Cloudinaryへ変更
 // ================================

@@ -1,3 +1,7 @@
+// handlers/receiptHandler.js
+// 2026/5/2
+// Okiura Kazuo
+
 const { generateReceiptTags } = require("../utils/receiptTagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 
