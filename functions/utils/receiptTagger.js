@@ -1,13 +1,12 @@
-// utils/receiptTagger.js
-
-
 const Groq = require("groq-sdk");
 
 const client = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-// レシート専用タグ分類
+// =====================================
+// レシート専用タグ分類AI
+// =====================================
 async function generateReceiptTags(text) {
   try {
     const res = await client.chat.completions.create({
@@ -17,9 +16,15 @@ async function generateReceiptTags(text) {
         {
           role: "system",
           content: `
-以下の中から必ず1つ選びなさい：
+あなたは経費仕訳AIです。
+
+以下から必ず1つ選択してください：
+
 食費 / 交通費 / 燃料費 / 資材費 / 農薬 / 肥料 / 機械 / 消耗品 / その他経費
-1語のみ返す
+
+ルール：
+- 1語のみ
+- 説明禁止
 `,
         },
         {
@@ -31,6 +36,9 @@ async function generateReceiptTags(text) {
 
     const subTag = res?.choices?.[0]?.message?.content?.trim();
 
+    // ================================
+    // 固定タグ + 分類タグ
+    // ================================
     return ["経費", subTag || "その他経費"];
 
   } catch (err) {

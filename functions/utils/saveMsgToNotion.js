@@ -2,11 +2,15 @@
 
 const axios = require("axios");
 
-// ★ 環境変数チェック（これ超重要）
+// ================================
+// Notion認証情報
+// ================================
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const DATABASE_ID = process.env.NOTION_DATABASE_ID;
 
-// ===== Notion保存関数 =====
+// ================================
+// Notion保存関数
+// ================================
 async function saveMsgToNotion(data) {
   const {
     title,
@@ -15,7 +19,6 @@ async function saveMsgToNotion(data) {
     files = [],
   } = data;
 
-  // ===== ★ここでID確認ログ出す（超重要）=====
   console.log("DATABASE_ID:", DATABASE_ID);
 
   const now = new Date();
@@ -31,25 +34,27 @@ async function saveMsgToNotion(data) {
   const bodyText = `【${displayTime}】\n${content || ""}`;
 
   try {
-    // ===== ファイル整形 =====
+    // ================================
+    // Cloudinary URLをそのまま使用
+    // ================================
     const fileProperty = (files || [])
       .filter((url) => typeof url === "string" && url.startsWith("http"))
       .map((url, i) => ({
         name: `file_${i + 1}`,
-        external: { url },
+        external: { url }, // Cloudinary URL
       }));
 
-    // ===== Notion送信 =====
+    // ================================
+    // Notion API送信
+    // ================================
     const res = await axios.post(
       "https://api.notion.com/v1/pages",
       {
-        // ★ここはOK（database_id使ってる）
         parent: {
           database_id: DATABASE_ID,
         },
 
         properties: {
-          // ★タイトル（DB側と名前完全一致してる？）
           名前: {
             title: [
               {
@@ -60,21 +65,18 @@ async function saveMsgToNotion(data) {
             ],
           },
 
-          // ★日付プロパティ名一致してる？
           日付: {
             date: {
               start: nowISO,
             },
           },
 
-          // ★ここも完全一致が必要
           マルチセレクト: {
             multi_select: (tags.length > 0 ? tags : ["その他"]).map((tag) => ({
               name: tag,
             })),
           },
 
-          // ★プロパティ名「完全一致」注意（全角スペース含む）
           ...(fileProperty.length > 0 && {
             "ファイル & メディア": {
               files: fileProperty,
@@ -82,7 +84,6 @@ async function saveMsgToNotion(data) {
           }),
         },
 
-        // ===== 本文 =====
         children: [
           {
             object: "block",
@@ -109,7 +110,6 @@ async function saveMsgToNotion(data) {
       }
     );
 
-    // ★URL確認（これ重要）
     console.log("NOTION URL:", res.data.url);
 
   } catch (err) {
