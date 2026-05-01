@@ -1,10 +1,11 @@
 // utils/firebaseUpload.js
 
 // ===== Firebase Adminからバケット取得 =====
-// ※ firebase.js → firebaseAdmin.js にリネーム済み前提
-//const { bucket } = require("./firebaseAdmin");
+// firebaseAdmin.js 側で bucket を export している前提
+const { bucket } = require("./firebaseAdmin");
 
-//const crypto = require("crypto");
+// ===== Node.js標準のcryptoを使用 =====
+const crypto = require("crypto");
 
 // ===== Firebase Storageへアップロード =====
 // buffer   : LINEから取得したバイナリ
@@ -12,8 +13,18 @@
 // mimeType : 画像 or ファイル種別
 async function uploadToFirebase(buffer, fileName, mimeType = "image/jpeg") {
   try {
+    // ===== 入力チェック =====
+    if (!buffer) {
+      console.error("❌ buffer が空");
+      return null;
+    }
+
+    if (!fileName) {
+      fileName = "unknown.jpg";
+    }
+
     // ===== ユニークファイル名生成 =====
-    // 同名衝突防止 + 追跡性確保
+    // Date.now() + ランダム値で衝突防止
     const safeName =
       Date.now() +
       "_" +
@@ -29,25 +40,22 @@ async function uploadToFirebase(buffer, fileName, mimeType = "image/jpeg") {
       metadata: {
         contentType: mimeType,
       },
-      resumable: false, // 小さい画像ならOFFの方が安定
+      resumable: false, // 小さいファイルならfalseが安定
     });
 
-    // =====================================================
-    // ⚠️ 公開設定（ここは設計ポイント）
-    // =====================================================
-    // makePublic は「誰でもURLアクセス可能」になる
-    // 個人ツールならOK / SaaSなら署名URL推奨
-
+    // ===== 公開設定 =====
+    // 誰でもアクセス可能になる（用途に応じて変更OK）
     await file.makePublic();
 
     // ===== 公開URL生成 =====
-    // Google Storage標準形式
-  //  const url = `https://storage.googleapis.com/${bucket.name}/${safeName}`;
+    const url = `https://storage.googleapis.com/${bucket.name}/${safeName}`;
+
+    console.log("✅ Firebase upload success:", url);
 
     return url;
 
   } catch (err) {
-    console.error("Firebase upload error:", err);
+    console.error("🔥 Firebase upload error:", err);
     return null;
   }
 }
