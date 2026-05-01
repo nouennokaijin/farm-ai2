@@ -5,11 +5,17 @@
   "scripts": {
     "start": "node functions/index.js"
   },
+//
   "dependencies": {
-    "dotenv": "^16.6.1",
-    "express": "^4.22.1",
-    "groq-sdk": "^0.8.0"
-  },
+    "@line/bot-sdk": "^11.0.0",
+    "axios": "^1.15.2",
+    "cloudinary": "^2.10.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "firebase-admin": "^13.8.0",
+    "groq-sdk": "^1.1.2"
+  }
+//
   "engines": {
     "node": ">=18"
   }
