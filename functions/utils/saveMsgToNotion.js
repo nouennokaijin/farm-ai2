@@ -63,7 +63,7 @@ async function saveMsgToNotion(data) {
 
           // ===== タグ（Multi-select対応）=====
           // Notion側プロパティは「multi_select」にすること
-          タグ: {
+         マルチセレクト: {
             multi_select: (tags.length > 0 ? tags : ["その他"]).map((tag) => ({
               name: tag,
             })),
