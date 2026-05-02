@@ -24,7 +24,7 @@ async function extractTextFromImage(imageUrl) {
     // ※画像対応モデルを使用
     // ================================
     const res = await client.chat.completions.create({
-      model: "llama-4-scout-17b-16e-instruct", // ← Vision対応モデル
+      model:"meta-llama/llama-4-scout-17b-16e-instruct", // "llama-4-scout-17b-16e-instruct", // ← Vision対応モデル
       temperature: 0,
       messages: [
         {
