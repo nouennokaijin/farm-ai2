@@ -1,13 +1,12 @@
 // handlers/postHandler.js
 // 2026/5/2
-// Okiura Kazuo
+// 投稿処理（画像・OCR・AI統合）
 
 const { buildTags } = require("../utils/tagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 
 const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
-const { extractTextFromImage } = require("../utils/ocr");
 
 const Groq = require("groq-sdk");
 
@@ -16,7 +15,7 @@ const client = new Groq({
 });
 
 // ================================
-// AI
+// 🤖 テキスト生成
 // ================================
 async function generateText(prompt) {
   try {
@@ -27,97 +26,73 @@ async function generateText(prompt) {
     });
 
     return res.choices[0].message.content.trim();
-  } catch (err) {
-    console.error(err);
+  } catch {
     return "（AIエラー）";
   }
 }
 
 // ================================
-// Vision風
-// ================================
-async function generateVisionText({ prompt, images = [] }) {
-  const img = images.length ? `\n${images.join("\n")}` : "";
-  return generateText(prompt + img);
-}
-
-// ================================
-// 投稿
+// 📸 投稿ハンドラー
 // ================================
 async function handlePost({
   text = "",
   replyToken,
   imageIds = [],
-  fileIds = [],
 }) {
   try {
+
     const safeText = text?.trim() || "";
 
     // ================================
-    // upload（修正済み）
+    // 📤 LINE画像 → Cloudinary
     // ================================
     const fileUrls = await Promise.all(
-      [...imageIds, ...fileIds].map(async (id) => {
+      imageIds.map(async (id) => {
         const buffer = await downloadLineMedia(id);
         if (!buffer) return null;
 
         return uploadToCloudinary(
           buffer,
-          `file_${Date.now()}_${id}`,
+          `post_${Date.now()}_${id}`, // ← 投稿専用prefix
           "farm-ai"
         );
       })
     ).then(res => res.filter(Boolean));
 
     // ================================
-    // OCR
+    // 🤖 AI生成
     // ================================
-    let ocrText = "";
-
-    for (const url of fileUrls) {
-      try {
-        const t = await extractTextFromImage(url);
-        if (t) ocrText += t + "\n";
-      } catch {}
-    }
-
-    // ================================
-    // AI
-    // ================================
-    const draft = await generateVisionText({
-      prompt: `${safeText}`,
-      images: fileUrls,
-    });
-
-    const finalPost = await generateText(`
-138文字以内で整形：
-${draft}
+    const aiText = await generateText(`
+画像とテキストをもとに自然な投稿にしてください：
+${safeText}
 `);
 
     // ================================
-    // 🏷 TAG
+    // 🏷 タグ（王＝type優先）
     // ================================
     const tags = await buildTags({
-      text: finalPost,
+      text: aiText,
       type: "投稿",
     });
 
     // ================================
-    // NOTION
+    // 🧾 Notion保存
     // ================================
     setImmediate(async () => {
       await saveMsgToNotion({
         title: "LINE投稿",
+
         userText: safeText,
-        aiText: finalPost,
-        ocrText,
+        aiText,
         files: fileUrls,
+
         tags,
+        type: "投稿",
       });
     });
 
   } catch (e) {
-    console.error(e);
+    console.error("post handler error:", e);
   }
 }
 

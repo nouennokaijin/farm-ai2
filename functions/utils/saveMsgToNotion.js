@@ -1,42 +1,30 @@
 // utils/saveMsgToNotion.js
+// 2026/5/2
+// Notion保存ユーティリティ
 
 const axios = require("axios");
 
-// ================================
-// Notion認証情報
-// ================================
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const DATABASE_ID = process.env.NOTION_DATABASE_ID;
 
 // ================================
-// Notion保存関数
-// ================================
-// 受け取るデータを拡張
-// - userText: ユーザー入力
-// - aiText: AI生成文
-// - ocrText: OCR生データ
-// - receiptText: 整形済みレシート
-// - その他は既存互換
+// 🧾 Notion保存
 // ================================
 async function saveMsgToNotion(data) {
   const {
     title,
-    content,       // 既存（互換用）
-    userText,      // 追加
-    aiText,        // 追加
-    ocrText,       // 追加
-    receiptText,   // 追加
+    content,
+    userText,
+    aiText,
+    ocrText,
+    receiptText,
     tags = [],
     files = [],
   } = data;
 
-  console.log("DATABASE_ID:", DATABASE_ID);
-
   const now = new Date();
 
-  // ================================
-  // 日本時間生成
-  // ================================
+  // 🇯🇵 JST
   const nowJP = new Date(
     now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
   );
@@ -44,90 +32,58 @@ async function saveMsgToNotion(data) {
   const nowISO = nowJP.toISOString();
   const displayTime = nowJP.toLocaleString("ja-JP");
 
-  // ================================
-  // メイン本文（従来互換）
-  // userText優先、なければcontent
-  // ================================
   const mainText = userText || content || "";
   const bodyText = `【${displayTime}】\n${mainText}`;
 
   try {
+
     // ================================
-    // Cloudinary URLそのまま使用
+    // 📎 ファイル整形（安全化）
     // ================================
     const fileProperty = (files || [])
-      .filter((url) => typeof url === "string" && url.startsWith("http"))
+      .filter(Boolean)
       .map((url, i) => ({
-        name: `file_${i + 1}`,
+        name: `file_${i + 1}_${Date.now()}`, // ← 衝突防止
         external: { url },
       }));
 
     // ================================
-    // 🧠 ここが今回のコア（プロパティ拡張）
+    // 🧠 properties構築
     // ================================
     const properties = {
-      // タイトル
       名前: {
-        title: [
-          {
-            text: {
-              content: title || "無題",
-            },
-          },
-        ],
+        title: [{ text: { content: title || "無題" } }],
       },
 
-      // 日付
       日付: {
-        date: {
-          start: nowISO,
-        },
+        date: { start: nowISO },
       },
 
-      // タグ
       マルチセレクト: {
-        multi_select: (tags.length > 0 ? tags : ["その他"]).map((tag) => ({
-          name: tag,
+        multi_select: (tags.length ? tags : ["その他"]).map((t) => ({
+          name: t,
         })),
       },
     };
 
-    // ================================
-    // 条件付きで各プロパティ追加
-    // 空は送らない（Notionエラー防止）
-    // ================================
-
     if (aiText) {
       properties["AI"] = {
-        rich_text: [
-          {
-            text: { content: aiText },
-          },
-        ],
+        rich_text: [{ text: { content: aiText } }],
       };
     }
 
     if (ocrText) {
       properties["OCR"] = {
-        rich_text: [
-          {
-            text: { content: ocrText },
-          },
-        ],
+        rich_text: [{ text: { content: ocrText } }],
       };
     }
 
     if (receiptText) {
       properties["レシート"] = {
-        rich_text: [
-          {
-            text: { content: receiptText },
-          },
-        ],
+        rich_text: [{ text: { content: receiptText } }],
       };
     }
 
-    // ファイル（あれば）
     if (fileProperty.length > 0) {
       properties["ファイル&メディア"] = {
         files: fileProperty,
@@ -135,18 +91,14 @@ async function saveMsgToNotion(data) {
     }
 
     // ================================
-    // Notion API送信
+    // 🚀 Notion送信
     // ================================
     const res = await axios.post(
       "https://api.notion.com/v1/pages",
       {
-        parent: {
-          database_id: DATABASE_ID,
-        },
-
+        parent: { database_id: DATABASE_ID },
         properties,
 
-        // 本文（メインテキスト）
         children: [
           {
             object: "block",
@@ -155,9 +107,7 @@ async function saveMsgToNotion(data) {
               rich_text: [
                 {
                   type: "text",
-                  text: {
-                    content: bodyText,
-                  },
+                  text: { content: bodyText },
                 },
               ],
             },
