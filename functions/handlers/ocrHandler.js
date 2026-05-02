@@ -8,7 +8,7 @@ const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
 
-// 🧠 新OCRエンジン（画像→構造化テキスト）
+// 🧠 OCRエンジン（画像→構造化テキスト）
 const { smartOCR } = require("../secretary/smartOCR");
 
 const Groq = require("groq-sdk");
@@ -62,12 +62,19 @@ async function handleOCR({
   try {
 
     // ================================
-    // 🧠 処理開始ログ（追加）
+    // 🚀 START LOG（全体監視）
     // ================================
     console.log("🚀 OCR HANDLER START");
     console.log("📩 input text:", text);
     console.log("🖼 imageIds:", imageIds);
     console.log("📎 fileIds:", fileIds);
+
+    // ================================
+    // ⚠️ 入力チェック（重要）
+    // ================================
+    if ((!imageIds || imageIds.length === 0) && (!fileIds || fileIds.length === 0)) {
+      console.warn("⚠️ WARNING: no image/file input → OCR will NOT run");
+    }
 
     // ================================
     // 📤 LINE画像取得 → Cloudinary保存
@@ -77,8 +84,9 @@ async function handleOCR({
         console.log("⬇️ downloading media:", id);
 
         const buffer = await downloadLineMedia(id);
+
         if (!buffer) {
-          console.log("⚠️ download failed:", id);
+          console.warn("⚠️ download failed:", id);
           return null;
         }
 
@@ -96,6 +104,13 @@ async function handleOCR({
     console.log("📦 fileUrls:", fileUrls);
 
     // ================================
+    // ⚠️ OCR入力チェック
+    // ================================
+    if (fileUrls.length === 0) {
+      console.error("❌ OCR SKIPPED: no valid uploaded images");
+    }
+
+    // ================================
     // 🔍 OCR処理（複数画像対応）
     // ================================
     let rawText = "";
@@ -106,19 +121,34 @@ async function handleOCR({
 
       const result = await smartOCR(url);
 
+      // ================================
+      // 🧠 OCR結果ログ（完全可視化）
+      // ================================
       console.log("🧾 OCR RAW RESULT:", result?.rawText);
       console.log("✨ OCR REFINED RESULT:", result?.refinedText);
 
-      rawText += (result.rawText || "") + "\n";
-      refinedText += (result.refinedText || "") + "\n";
+      if (!result?.rawText) {
+        console.warn("⚠️ OCR returned empty rawText");
+      }
+
+      rawText += (result?.rawText || "") + "\n";
+      refinedText += (result?.refinedText || "") + "\n";
     }
 
-    const cleanedText = refinedText.trim() || rawText.trim();
+    // ================================
+    // 🧠 OCR採用ルール（重要）
+    // ================================
+    const cleanedText =
+      rawText.trim() || refinedText.trim() || text.trim();
 
-    console.log("📄 CLEANED TEXT:", cleanedText);
+    console.log("📄 FINAL OCR TEXT:", cleanedText);
+
+    if (!cleanedText) {
+      console.error("❌ NO TEXT AVAILABLE (OCR + input all empty)");
+    }
 
     // ================================
-    // 🧠 AI意味解析（要約・構造化）
+    // 🤖 AI解析（意味化）
     // ================================
     console.log("🤖 AI INPUT:", cleanedText);
 
@@ -127,7 +157,7 @@ async function handleOCR({
     console.log("🧠 AI OUTPUT:", aiText);
 
     // ================================
-    // 🏷 タグ生成（固定ルール）
+    // 🏷 タグ生成
     // ================================
     const tags = await buildTags({
       text: cleanedText,
@@ -137,7 +167,7 @@ async function handleOCR({
     console.log("🏷 TAGS:", tags);
 
     // ================================
-    // 🧾 Notion保存（非同期書き込み）
+    // 🧾 Notion保存
     // ================================
     setImmediate(async () => {
       console.log("📤 SAVING TO NOTION...");
@@ -145,30 +175,19 @@ async function handleOCR({
       await saveMsgToNotion({
         title: "OCRログ（強化版）",
 
-        // ============================
-        // 🧠 入力レイヤー
-        // ============================
         userText: text,
 
-        // ============================
-        // 🔍 OCRレイヤー
-        // ============================
+        // 🔍 OCRレイヤー（raw優先構造）
         rawOCR: rawText,
         ocrText: cleanedText,
 
-        // ============================
-        // 🤖 AI要約レイヤー
-        // ============================
+        // 🤖 AI要約
         aiText,
 
-        // ============================
         // 📎 画像URL
-        // ============================
         files: fileUrls,
 
-        // ============================
         // 🏷 タグ
-        // ============================
         tags,
 
         type: "OCR",
