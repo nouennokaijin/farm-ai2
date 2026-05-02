@@ -9,7 +9,7 @@ const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
 
 // 🧠 新OCRエンジン
-const { smartOCR } = require("../services/smartOCR");
+const { smartOCR } = require("../secretary/smartOCR");
 
 const Groq = require("groq-sdk");
 
