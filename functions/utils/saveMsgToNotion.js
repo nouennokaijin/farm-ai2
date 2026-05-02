@@ -11,10 +11,21 @@ const DATABASE_ID = process.env.NOTION_DATABASE_ID;
 // ================================
 // Notion保存関数
 // ================================
+// 受け取るデータを拡張
+// - userText: ユーザー入力
+// - aiText: AI生成文
+// - ocrText: OCR生データ
+// - receiptText: 整形済みレシート
+// - その他は既存互換
+// ================================
 async function saveMsgToNotion(data) {
   const {
     title,
-    content,
+    content,       // 既存（互換用）
+    userText,      // 追加
+    aiText,        // 追加
+    ocrText,       // 追加
+    receiptText,   // 追加
     tags = [],
     files = [],
   } = data;
@@ -23,7 +34,9 @@ async function saveMsgToNotion(data) {
 
   const now = new Date();
 
-  // 日本時間
+  // ================================
+  // 日本時間生成
+  // ================================
   const nowJP = new Date(
     now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
   );
@@ -31,18 +44,95 @@ async function saveMsgToNotion(data) {
   const nowISO = nowJP.toISOString();
   const displayTime = nowJP.toLocaleString("ja-JP");
 
-  const bodyText = `【${displayTime}】\n${content || ""}`;
+  // ================================
+  // メイン本文（従来互換）
+  // userText優先、なければcontent
+  // ================================
+  const mainText = userText || content || "";
+  const bodyText = `【${displayTime}】\n${mainText}`;
 
   try {
     // ================================
-    // Cloudinary URLをそのまま使用
+    // Cloudinary URLそのまま使用
     // ================================
     const fileProperty = (files || [])
       .filter((url) => typeof url === "string" && url.startsWith("http"))
       .map((url, i) => ({
         name: `file_${i + 1}`,
-        external: { url }, // Cloudinary URL
+        external: { url },
       }));
+
+    // ================================
+    // 🧠 ここが今回のコア（プロパティ拡張）
+    // ================================
+    const properties = {
+      // タイトル
+      名前: {
+        title: [
+          {
+            text: {
+              content: title || "無題",
+            },
+          },
+        ],
+      },
+
+      // 日付
+      日付: {
+        date: {
+          start: nowISO,
+        },
+      },
+
+      // タグ
+      マルチセレクト: {
+        multi_select: (tags.length > 0 ? tags : ["その他"]).map((tag) => ({
+          name: tag,
+        })),
+      },
+    };
+
+    // ================================
+    // 条件付きで各プロパティ追加
+    // 空は送らない（Notionエラー防止）
+    // ================================
+
+    if (aiText) {
+      properties["AI"] = {
+        rich_text: [
+          {
+            text: { content: aiText },
+          },
+        ],
+      };
+    }
+
+    if (ocrText) {
+      properties["OCR"] = {
+        rich_text: [
+          {
+            text: { content: ocrText },
+          },
+        ],
+      };
+    }
+
+    if (receiptText) {
+      properties["レシート"] = {
+        rich_text: [
+          {
+            text: { content: receiptText },
+          },
+        ],
+      };
+    }
+
+    // ファイル（あれば）
+    if (fileProperty.length > 0) {
+      properties["ファイル&メディア"] = {
+        files: fileProperty,
+      };
+    }
 
     // ================================
     // Notion API送信
@@ -54,36 +144,9 @@ async function saveMsgToNotion(data) {
           database_id: DATABASE_ID,
         },
 
-        properties: {
-          名前: {
-            title: [
-              {
-                text: {
-                  content: title || "無題",
-                },
-              },
-            ],
-          },
+        properties,
 
-          日付: {
-            date: {
-              start: nowISO,
-            },
-          },
-
-          マルチセレクト: {
-            multi_select: (tags.length > 0 ? tags : ["その他"]).map((tag) => ({
-              name: tag,
-            })),
-          },
-
-          ...(fileProperty.length > 0 && {
-          "ファイル&メディア" : {
-              files: fileProperty,
-            },
-          }),
-        },
-
+        // 本文（メインテキスト）
         children: [
           {
             object: "block",
