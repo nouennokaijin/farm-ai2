@@ -3,13 +3,6 @@
 // Okiura Kazuo
 
 const { buildTags } = require("../utils/tagger");
-
-const tags = await buildTags({
-  text: finalPost,
-  type: "投稿"
-});
-
-
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 
 // ================================
@@ -23,13 +16,12 @@ const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
 
 // ================================
-// 各種ユーティリティ
+// OCR
 // ================================
-const { generateTags } = require("../utils/tagger");
 const { extractTextFromImage } = require("../utils/ocr");
 
 // ================================
-// ★ AIクライアント（Groq）
+// Groq AI
 // ================================
 const Groq = require("groq-sdk");
 
@@ -38,7 +30,7 @@ const client = new Groq({
 });
 
 // ================================
-// 🧠 AI関数（内蔵）
+// 🧠 AI関数
 // ================================
 async function generateText(prompt) {
   try {
@@ -56,57 +48,37 @@ async function generateText(prompt) {
   }
 }
 
-// ※疑似Vision（URLをヒントにする）
+// ================================
+// Vision風生成
+// ================================
 async function generateVisionText({ prompt, images = [] }) {
-  try {
-    const imageInfo = images.length
-      ? `\n参考画像URL:\n${images.join("\n")}`
-      : "";
+  const imageInfo = images.length
+    ? `\n画像URL:\n${images.join("\n")}`
+    : "";
 
-    return await generateText(prompt + imageInfo);
-
-  } catch (err) {
-    console.error("generateVisionText error:", err);
-    return "（画像AI生成エラー）";
-  }
+  return generateText(prompt + imageInfo);
 }
 
 // ================================
-// 🧭 基本理念
+// 🌱 基本理念
 // ================================
 const baseConcept = `
 便利すぎる世界で、
 人は少しだけ弱くなった気がする。
 ボタンひとつで何でもできるけど、
 手で触れることを大切にしたい。
-ゆっくりでいい。
-完璧じゃなくていい。
-少しくらい間違ってもいい。
-きっと大地は、そんなこと気にしない。
 `;
 
 // ================================
-// 🎯 AI人格
+// 🎯 人格
 // ================================
 const corePrompt = `
-あなたは、自然や手仕事の価値を大切にする書き手です。
-
-【価値観】
-・便利さに流されすぎない
-・手で触れることを大切にする
-・不完全さを肯定する
-・自然の視点を持つ
-・静かで余韻のある表現
-
-【文章ルール】
-・X投稿用（128〜138文字）
-・自然な日本語
-・言い切りすぎない
-・ポエム寄りだが伝わる文章
+あなたは自然と手仕事を大切にする書き手。
+X投稿用に128〜138文字で出力。
 `;
 
 // ================================
-// 投稿処理
+// 📌 投稿処理
 // ================================
 async function handlePost({
   text = "",
@@ -117,33 +89,31 @@ async function handlePost({
   console.log("📝 handlePost:", text);
 
   try {
-    const safeText = text && text.trim() !== "" ? text : "";
+    const safeText = text?.trim() || "";
 
-    // =====================================================
-    // ☁️ アップロード
-    // =====================================================
+    // ================================
+    // ☁️ upload
+    // ================================
     const uploadTasks = [];
 
     for (const id of [...imageIds, ...fileIds]) {
-      uploadTasks.push(
-        (async () => {
-          const buffer = await downloadLineMedia(id);
-          if (!buffer) return null;
+      uploadTasks.push(async () => {
+        const buffer = await downloadLineMedia(id);
+        if (!buffer) return null;
 
-          return await uploadToCloudinary(
-            buffer,
-            `file_${Date.now()}_${id}`,
-            "farm-ai"
-          );
-        })()
-      );
+        return uploadToCloudinary(
+          buffer,
+          `file_${Date.now()}_${id}`,
+          "farm-ai"
+        );
+      });
     }
 
     const fileUrls = (await Promise.all(uploadTasks)).filter(Boolean);
 
-    // =====================================================
+    // ================================
     // 🔍 OCR
-    // =====================================================
+    // ================================
     let ocrText = "";
 
     for (const url of fileUrls) {
@@ -155,61 +125,42 @@ async function handlePost({
       }
     }
 
-    // =====================================================
-    // 🧠 AI生成（1段目）
-    // =====================================================
+    // ================================
+    // 🧠 AI生成1
+    // ================================
     let draft;
 
     if (fileUrls.length > 0) {
       draft = await generateVisionText({
-        prompt: `
-${corePrompt}
-
-【理念】
-${baseConcept}
-
-【入力】
-${safeText || "（テキストなし）"}
-        `,
-        images: fileUrls
+        prompt: `${corePrompt}\n${baseConcept}\n${safeText}`,
+        images: fileUrls,
       });
     } else {
-      draft = await generateText(`
-${corePrompt}
-
-【理念】
-${baseConcept}
-
-【入力】
-${safeText}
-`);
+      draft = await generateText(`${corePrompt}\n${baseConcept}\n${safeText}`);
     }
 
-    // =====================================================
-    // ✨ AI生成（2段目）
-    // =====================================================
+    // ================================
+    // ✨ AI生成2
+    // ================================
     const finalPost = await generateText(`
-以下をX投稿として仕上げてください。
-
+以下をX投稿に整形：
 ・138文字以内
-・自然な流れ
-・冗長削除
-・余韻を残す
+・余韻重視
 
-文章：
 ${draft}
 `);
 
-    console.log("🧾 finalPost:", finalPost);
+    // ================================
+    // 🏷 タグ（★ここが修正ポイント）
+    // ================================
+    const tags = await buildTags({
+      text: finalPost,
+      type: "投稿"
+    });
 
-    // =====================================================
-    // 🏷 タグ
-    // =====================================================
-    const tags = await generateTags(finalPost);
-
-    // =====================================================
-    // 💾 Notion保存
-    // =====================================================
+    // ================================
+    // 💾 Notion
+    // ================================
     setImmediate(async () => {
       await saveMsgToNotion({
         title: "LINE投稿",

@@ -2,33 +2,26 @@
 // 2026/5/2
 // Okiura Kazuo
 
-
 const { buildTags } = require("../utils/tagger");
-
-const tags = await buildTags({
-  text: cleanedText,
-  type: "OCR"
-});
-
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 
 // ================================
-// Cloudinary（画像保存）
+// Cloudinary
 // ================================
 const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 
 // ================================
-// LINE画像取得
+// LINE
 // ================================
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
 
 // ================================
-// OCR（画像 → テキスト）
+// OCR
 // ================================
 const { extractTextFromImage } = require("../utils/ocr");
 
 // ================================
-// ★ AIクライアント（Groq）
+// Groq
 // ================================
 const Groq = require("groq-sdk");
 
@@ -37,7 +30,7 @@ const client = new Groq({
 });
 
 // ================================
-// 🧠 AI関数（内蔵）
+// AI
 // ================================
 async function generateText(prompt) {
   try {
@@ -51,23 +44,22 @@ async function generateText(prompt) {
 
   } catch (err) {
     console.error("generateText error:", err);
-    return "（AI生成エラー）";
+    return "（AIエラー）";
   }
 }
 
 // ================================
-// 🧹 OCRテキスト整形
+// テキスト整形
 // ================================
 function cleanText(text) {
-  if (!text) return "";
-  return text
+  return (text || "")
     .replace(/\n/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 // ================================
-// 📖 OCR処理ハンドラ
+// OCR handler
 // ================================
 async function handleOCR({
   text = "",
@@ -78,104 +70,83 @@ async function handleOCR({
   console.log("📖 handleOCR start");
 
   try {
-    // =====================================================
-    // ☁️ 画像アップロード
-    // =====================================================
+    // ================================
+    // upload
+    // ================================
     const uploadTasks = [];
 
     for (const id of [...imageIds, ...fileIds]) {
-      uploadTasks.push(
-        (async () => {
-          const buffer = await downloadLineMedia(id);
-          if (!buffer) return null;
+      uploadTasks.push(async () => {
+        const buffer = await downloadLineMedia(id);
+        if (!buffer) return null;
 
-          return await uploadToCloudinary(
-            buffer,
-            `ocr_${Date.now()}_${id}`,
-            "book-ocr"
-          );
-        })()
-      );
+        return uploadToCloudinary(
+          buffer,
+          `ocr_${Date.now()}_${id}`,
+          "book-ocr"
+        );
+      });
     }
 
     const fileUrls = (await Promise.all(uploadTasks)).filter(Boolean);
 
-    if (fileUrls.length === 0) {
-      console.log("⚠️ 画像なし → OCRスキップ");
-      return;
-    }
+    if (fileUrls.length === 0) return;
 
-    // =====================================================
-    // 🔍 OCR
-    // =====================================================
-    let rawOcrText = "";
+    // ================================
+    // OCR
+    // ================================
+    let raw = "";
 
     for (const url of fileUrls) {
       try {
-        const extracted = await extractTextFromImage(url);
-        if (extracted) rawOcrText += extracted + "\n";
+        const t = await extractTextFromImage(url);
+        if (t) raw += t + "\n";
       } catch (e) {
-        console.error("OCR error:", e);
+        console.error(e);
       }
     }
 
-    const cleanedText = cleanText(rawOcrText);
+    const cleanedText = cleanText(raw);
 
-    if (!cleanedText) {
-      console.log("⚠️ OCR結果が空");
-    }
-
-    console.log("📝 OCR TEXT:", cleanedText.slice(0, 200));
-
-    // =====================================================
-    // 🧠 AI要約＋感想
-    // =====================================================
+    // ================================
+    // AI
+    // ================================
     const aiResult = await generateText(`
-あなたは哲学書をわかりやすく解説する専門家です。
+要約と感想をJSONで出力：
 
-以下の文章を読んで、要約と感想を出力してください。
-
-# 出力形式（JSON）
 {
   "summary": "",
   "impression": ""
 }
 
-# ルール
-・summaryは100〜150文字
-・impressionは100文字前後
-・やさしい言葉で
-
-# 入力
-${cleanedText || "（テキストなし）"}
+本文：
+${cleanedText}
 `);
 
-    console.log("🤖 AI RESULT:", aiResult);
-
-    // =====================================================
-    // 🧩 JSONパース
-    // =====================================================
     let summary = "";
     let impression = "";
 
     try {
-      // JSON部分だけ抽出（安全対策）
-      const jsonMatch = aiResult.match(/\{[\s\S]*\}/);
-      const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : aiResult);
+      const json = aiResult.match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(json ? json[0] : aiResult);
 
       summary = parsed.summary || "";
       impression = parsed.impression || "";
-
     } catch (e) {
-      console.error("JSON parse error:", e);
-
       summary = aiResult;
-      impression = "";
     }
 
-    // =====================================================
-    // 💾 Notion保存
-    // =====================================================
+    // ================================
+    // 🏷 タグ（★修正）
+    // ================================
+    const tags = await buildTags({
+      text: cleanedText,
+      type: "OCR"
+    });
+
+    // ================================
+    // Notion
+    // ================================
     setImmediate(async () => {
       await saveMsgToNotion({
         title: "OCR読書ログ",
@@ -183,8 +154,8 @@ ${cleanedText || "（テキストなし）"}
         aiText: `${summary}\n\n${impression}`,
         ocrText: cleanedText,
         files: fileUrls,
-        tags: ["OCR", "読書"],
-        type: "book"
+        tags,
+        type: "book",
       });
     });
 
