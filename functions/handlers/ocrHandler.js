@@ -8,8 +8,10 @@ const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
 
-// 🧠 新OCRエンジン
-const { smartOCR } = require("../secretary/smartOCR");
+// ================================
+// 🧠 OCRエンジン（変更：smartOCR → utils/ocr）
+// ================================
+const { ocr } = require("../utils/ocr");
 
 const Groq = require("groq-sdk");
 
@@ -18,9 +20,11 @@ const client = new Groq({
 });
 
 // ================================
-// 🤖 AI（補助：構造化・要約）
+// 🤖 AI（補助：意味解析）
 // ================================
 async function generateInsight(text) {
+  if (!text) return "";
+
   try {
     const res = await client.chat.completions.create({
       model: "llama-3.3-70b-versatile",
@@ -45,13 +49,14 @@ async function generateInsight(text) {
     });
 
     return res?.choices?.[0]?.message?.content?.trim() || "";
-  } catch {
+  } catch (e) {
+    console.error("AI insight error:", e);
     return "";
   }
 }
 
 // ================================
-// 📖 OCRハンドラー本体（強化版）
+// 📖 OCRハンドラー本体
 // ================================
 async function handleOCR({
   text = "",
@@ -65,31 +70,40 @@ async function handleOCR({
     // ================================
     const fileUrls = await Promise.all(
       [...imageIds, ...fileIds].map(async (id) => {
-        const buffer = await downloadLineMedia(id);
-        if (!buffer) return null;
+        try {
+          const buffer = await downloadLineMedia(id);
+          if (!buffer) return null;
 
-        return uploadToCloudinary(
-          buffer,
-          `ocr_${Date.now()}_${id}`,
-          "book-ocr"
-        );
+          return await uploadToCloudinary(
+            buffer,
+            `ocr_${Date.now()}_${id}`,
+            "book-ocr"
+          );
+        } catch (e) {
+          console.error("upload error:", e);
+          return null;
+        }
       })
     ).then(res => res.filter(Boolean));
 
     // ================================
-    // 🔍 OCR（3段構造エンジン）
+    // 🔍 OCR処理
     // ================================
     let rawText = "";
     let refinedText = "";
 
     for (const url of fileUrls) {
-      const result = await smartOCR(url);
+      try {
+        const result = await ocr(url);
 
-      rawText += (result.rawText || "") + "\n";
-      refinedText += (result.refinedText || "") + "\n";
+        rawText += (result?.rawText || "") + "\n";
+        refinedText += (result?.refinedText || "") + "\n";
+      } catch (e) {
+        console.error("OCR error:", e, url);
+      }
     }
 
-    const cleanedText = refinedText.trim() || rawText.trim();
+    const cleanedText = (refinedText.trim() || rawText.trim());
 
     // ================================
     // 🧠 AI意味解析（補助）
@@ -97,7 +111,7 @@ async function handleOCR({
     const insight = await generateInsight(cleanedText);
 
     // ================================
-    // 🏷 タグ生成（王のルール固定）
+    // 🏷 タグ生成
     // ================================
     const tags = await buildTags({
       text: cleanedText,
@@ -105,33 +119,27 @@ async function handleOCR({
     });
 
     // ================================
-    // 🧾 Notion保存（構造化強化）
+    // 📦 Notion保存（非同期）
     // ================================
     setImmediate(async () => {
-      await saveMsgToNotion({
-        title: "OCRログ（強化版）",
+      try {
+        await saveMsgToNotion({
+          title: "OCRログ（強化版）",
 
-        // ============================
-        // 🧠 レイヤー分離
-        // ============================
-        userText: text,         // ユーザー指示
-        rawOCR: rawText,        // 生OCR
-        ocrText: cleanedText,   // 補正済OCR
+          userText: text,
+          rawOCR: rawText,
+          ocrText: cleanedText,
 
-        // ============================
-        // 🤖 AIは“意味層”
-        // ============================
-        aiInsight: insight,
+          aiInsight: insight,
 
-        files: fileUrls,
+          files: fileUrls,
+          tags,
 
-        // ============================
-        // 🏷 タグ（固定ルール）
-        // ============================
-        tags,
-
-        type: "OCR",
-      });
+          type: "OCR",
+        });
+      } catch (e) {
+        console.error("Notion save error:", e);
+      }
     });
 
   } catch (e) {
