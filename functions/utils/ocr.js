@@ -1,4 +1,6 @@
 // utils/ocr.js
+// 2026/5/2
+// Okiura Kazuo
 
 const Groq = require("groq-sdk");
 
@@ -7,44 +9,39 @@ const client = new Groq({
 });
 
 // =====================================
-// OCR（Groq Vision版）
-// Cloudinary画像 → テキスト抽出
+// 🧠 OCR（Visionエンジン）
 // =====================================
 async function extractTextFromImage(imageUrl) {
   try {
-    // ================================
-    // 入力チェック
-    // ================================
+
     if (!imageUrl || typeof imageUrl !== "string") {
       throw new Error("invalid imageUrl");
     }
 
-    // ================================
-    // Groq Visionモデル
-    // ※画像対応モデルを使用
-    // ================================
     const res = await client.chat.completions.create({
-      model:"meta-llama/llama-4-scout-17b-16e-instruct", // "llama-4-scout-17b-16e-instruct", // ← Vision対応モデル
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
       temperature: 0,
+
       messages: [
         {
           role: "system",
           content: `
-あなたは高精度OCRエンジンです。
+あなたは超高精度OCRエンジンです。
 
-やること：
-- 画像内の文字を正確に抽出する
-- 改行・構造をできるだけ保持する
-- 余計な説明は禁止
+ルール：
+- 文字を忠実に抽出
+- 改行構造を保持
+- 推測禁止
+- 補完禁止
 - 出力はテキストのみ
-`,
+          `.trim(),
         },
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: "この画像の文字をすべて抽出してください",
+              text: "画像内の文字をすべて正確に抽出してください",
             },
             {
               type: "image_url",
@@ -57,9 +54,7 @@ async function extractTextFromImage(imageUrl) {
       ],
     });
 
-    const text = res?.choices?.[0]?.message?.content?.trim();
-
-    return text || "";
+    return res?.choices?.[0]?.message?.content?.trim() || "";
 
   } catch (err) {
     console.error("OCR error:", err);

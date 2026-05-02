@@ -1,6 +1,6 @@
 // secretary/dispatcher.js
 // 2026/5/2
-// Okiura kazuo
+// Okiura Kazuo
 
 const Groq = require("groq-sdk");
 
@@ -13,8 +13,12 @@ const { handleSchedule } = require("../handlers/scheduleHandler");
 const { handleChat } = require("../handlers/chatHandler");
 const { handleOCR } = require("../handlers/ocrHandler");
 
-// 🧠 新規：学習ログ
+// 🧠 学習ログ
 const { logUnclassified } = require("../utils/chatLogger");
+
+// 🖼 smart OCR（追加）
+const { smartOCR } = require("../services/smartOCR");
+const { downloadLineMedia } = require("../utils/downloadLineMedia");
 
 // ================================
 // AIクライアント
@@ -24,7 +28,7 @@ const client = new Groq({
 });
 
 // ================================
-// 🧠 超短命ストリームバッファ
+// ストリームバッファ
 // ================================
 const streamBuffer = new Map();
 const STREAM_TTL = 10 * 1000;
@@ -32,7 +36,7 @@ const STREAM_TTL = 10 * 1000;
 // ================================
 // AI分類
 // ================================
-async function classify(text) {
+async function classify(text, hasImage = false) {
   try {
     const res = await client.chat.completions.create({
       model: "llama-3.3-70b-versatile",
@@ -40,10 +44,11 @@ async function classify(text) {
       messages: [
         {
           role: "system",
-          content:
-            "POST / RECEIPT / SCHEDULE / OCR / CHAT のいずれか1語だけ返す。不明はCHAT。",
+          content: hasImage
+            ? "POST / RECEIPT / SCHEDULE / OCR / CHAT のいずれか1語。画像ありはOCR優先。不明はOCRかCHAT。"
+            : "POST / RECEIPT / SCHEDULE / OCR / CHAT のいずれか1語。不明はCHAT。",
         },
-        { role: "user", content: text },
+        { role: "user", content: text || "image_input" },
       ],
     });
 
@@ -99,12 +104,17 @@ async function dispatcher(event) {
     console.log("📥 stream event:", message.type);
 
     // ================================
+    // 🧠 画像判定（超重要）
+    // ================================
+    const isImage = message.type === "image";
+
+    // ================================
     // 正規化
     // ================================
     const incoming = {
       userId,
       text: message.text || "",
-      images: message.type === "image" ? [message.id] : [],
+      images: isImage ? [message.id] : [],
       createdAt: Date.now(),
     };
 
@@ -113,6 +123,40 @@ async function dispatcher(event) {
     // ================================
     const state = mergeStream(userId, incoming);
     const text = (state.text || "").replace(/\s/g, "");
+
+    // ================================
+    // 🧠 OCR：最優先ルート（人間視覚処理）
+    // ================================
+    if (isImage || (state.images && state.images.length > 0)) {
+      console.log("🖼 smart OCR pipeline start");
+
+      streamBuffer.delete(userId);
+
+      try {
+        // ① LINE画像取得
+        const buffer = await downloadLineMedia(state.images[0]);
+
+        // ② 前処理 + OCR + AI補正
+        const { rawText, refinedText } = await smartOCR(buffer);
+
+        // ③ OCRハンドラへ
+        return handleOCR({
+          text: refinedText || rawText,
+          rawText,
+          imageIds: state.images,
+          replyToken,
+        });
+
+      } catch (e) {
+        console.error("OCR pipeline error:", e);
+
+        return handleChat({
+          text: "画像の読み取りに失敗しました",
+          replyToken,
+          state,
+        });
+      }
+    }
 
     // ================================
     // ⭐ 明示ルール
@@ -147,7 +191,7 @@ async function dispatcher(event) {
     // ================================
     // 🧠 AI分類
     // ================================
-    const intent = await classify(text);
+    const intent = await classify(text, isImage);
 
     switch (intent) {
       case "POST":
@@ -175,23 +219,21 @@ async function dispatcher(event) {
         });
 
       // ================================
-      // 🧠 ここが核心：学習ルート
+      // 🧠 学習ルート
       // ================================
       default:
         console.log("🧠 fallback → learning capture");
 
-        // ① 学習ログに保存（重要）
         await logUnclassified({
           text,
           state,
           reason: "NO_INTENT_MATCH",
         });
 
-        // ② ユーザーにはChat応答
         return handleChat({
           text,
           replyToken,
-          state, // 文脈も渡す（進化ポイント）
+          state,
         });
     }
 

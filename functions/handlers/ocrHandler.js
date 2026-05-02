@@ -7,7 +7,9 @@ const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 
 const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
-const { extractTextFromImage } = require("../utils/ocr");
+
+// 🧠 新OCRエンジン
+const { smartOCR } = require("../services/smartOCR");
 
 const Groq = require("groq-sdk");
 
@@ -16,24 +18,40 @@ const client = new Groq({
 });
 
 // ================================
-// 🤖 AI（補助役：要約生成のみ）
+// 🤖 AI（補助：構造化・要約）
 // ================================
-async function generateText(prompt) {
+async function generateInsight(text) {
   try {
     const res = await client.chat.completions.create({
       model: "llama-3.3-70b-versatile",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
+      messages: [
+        {
+          role: "system",
+          content: `
+あなたはOCR後の意味理解エンジンです。
+
+やること：
+- 内容の要約
+- 意味の整理
+- 重要ポイント抽出
+
+※推測は禁止
+※情報追加禁止
+          `.trim(),
+        },
+        { role: "user", content: text },
+      ],
+      temperature: 0.3,
     });
 
-    return res.choices[0].message.content.trim();
+    return res?.choices?.[0]?.message?.content?.trim() || "";
   } catch {
     return "";
   }
 }
 
 // ================================
-// 📖 OCRハンドラー本体
+// 📖 OCRハンドラー本体（強化版）
 // ================================
 async function handleOCR({
   text = "",
@@ -43,7 +61,7 @@ async function handleOCR({
   try {
 
     // ================================
-    // 📤 LINE画像 → Cloudinaryアップロード
+    // 📤 LINE画像取得 → Cloudinary
     // ================================
     const fileUrls = await Promise.all(
       [...imageIds, ...fileIds].map(async (id) => {
@@ -59,64 +77,56 @@ async function handleOCR({
     ).then(res => res.filter(Boolean));
 
     // ================================
-    // 🔍 OCR抽出（事実データ）
+    // 🔍 OCR（3段構造エンジン）
     // ================================
-    let raw = "";
+    let rawText = "";
+    let refinedText = "";
 
     for (const url of fileUrls) {
-      const t = await extractTextFromImage(url);
-      if (t) raw += t + "\n";
+      const result = await smartOCR(url);
+
+      rawText += (result.rawText || "") + "\n";
+      refinedText += (result.refinedText || "") + "\n";
     }
 
-    const cleanedText = raw.trim();
+    const cleanedText = refinedText.trim() || rawText.trim();
 
     // ================================
-    // 🤖 AI処理（補助：要約のみ）
+    // 🧠 AI意味解析（補助）
     // ================================
-    const ai = await generateText(`
-以下の内容を要約し、気づきを短くまとめてください：
-
-${cleanedText}
-`);
+    const insight = await generateInsight(cleanedText);
 
     // ================================
-    // 🏷 タグ生成（ここが設計の核心）
+    // 🏷 タグ生成（王のルール固定）
     // ================================
-    // 🔥 重要ルール：
-    // typeが存在する場合 → 分類は100%固定（AI介入なし）
-    // AIはタグ決定に関与しない
     const tags = await buildTags({
       text: cleanedText,
-
-      // ============================
-      // 👑 王（最終決定権）
-      // ============================
       type: "OCR",
     });
 
     // ================================
-    // 🧾 Notion保存
+    // 🧾 Notion保存（構造化強化）
     // ================================
     setImmediate(async () => {
       await saveMsgToNotion({
-        title: "OCR読書ログ",
+        title: "OCRログ（強化版）",
 
         // ============================
-        // 🧠 情報レイヤー分離
+        // 🧠 レイヤー分離
         // ============================
+        userText: text,         // ユーザー指示
+        rawOCR: rawText,        // 生OCR
+        ocrText: cleanedText,   // 補正済OCR
 
-        userText: text,          // ユーザー入力（指示）
-        ocrText: cleanedText,    // OCR結果（現実データ）
-
         // ============================
-        // 🤖 AIは補助情報のみ
+        // 🤖 AIは“意味層”
         // ============================
-        aiText: ai,
+        aiInsight: insight,
 
         files: fileUrls,
 
         // ============================
-        // 🏷 タグ（王の決定結果）
+        // 🏷 タグ（固定ルール）
         // ============================
         tags,
 
