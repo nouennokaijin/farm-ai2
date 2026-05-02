@@ -14,10 +14,24 @@ const client = new Groq({
 async function extractTextFromImage(imageUrl) {
   try {
 
+    // ================================
+    // 🚨 入力チェック（重要）
+    // ================================
     if (!imageUrl || typeof imageUrl !== "string") {
-      throw new Error("invalid imageUrl");
+      console.error("❌ OCR input invalid:", imageUrl);
+
+      return {
+        text: "",
+        success: false,
+        reason: "invalid_imageUrl",
+      };
     }
 
+    console.log("🔍 OCR REQUEST:", imageUrl);
+
+    // ================================
+    // 🤖 Vision OCR
+    // ================================
     const res = await client.chat.completions.create({
       model: "meta-llama/llama-4-scout-17b-16e-instruct",
       temperature: 0,
@@ -29,11 +43,12 @@ async function extractTextFromImage(imageUrl) {
 あなたは超高精度OCRエンジンです。
 
 ルール：
-- 文字を忠実に抽出
-- 改行構造を保持
-- 推測禁止
-- 補完禁止
-- 出力はテキストのみ
+- 画像内の文字をそのまま抽出
+- 改行・段落構造を維持
+- 推測は禁止
+- 補完は禁止
+- 意味解釈は禁止
+- 出力は純テキストのみ
           `.trim(),
         },
         {
@@ -54,11 +69,41 @@ async function extractTextFromImage(imageUrl) {
       ],
     });
 
-    return res?.choices?.[0]?.message?.content?.trim() || "";
+    // ================================
+    // 🧾 結果取得
+    // ================================
+    const text = res?.choices?.[0]?.message?.content?.trim() || "";
+
+    if (!text) {
+      console.warn("⚠️ OCR returned empty result");
+
+      return {
+        text: "",
+        success: false,
+        reason: "empty_result",
+      };
+    }
+
+    console.log("✅ OCR SUCCESS");
+
+    return {
+      text,
+      success: true,
+      reason: "ok",
+    };
 
   } catch (err) {
-    console.error("OCR error:", err);
-    return "";
+
+    // ================================
+    // ❌ エラーハンドリング（可視化）
+    // ================================
+    console.error("❌ OCR error:", err);
+
+    return {
+      text: "",
+      success: false,
+      reason: "ocr_exception",
+    };
   }
 }
 
