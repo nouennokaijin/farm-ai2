@@ -78,7 +78,7 @@ async function saveMsgToNotion(data) {
           },
 
           ...(fileProperty.length > 0 && {
-           ファイル&メディア: {
+          "ファイル&メディア" : {
               files: fileProperty,
             },
           }),
