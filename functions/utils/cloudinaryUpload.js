@@ -1,3 +1,7 @@
+// utils/cloudinaryUpload.js
+// 20265/2
+// Okiura Kazuo
+
 // =====================================
 // Cloudinary アップロード処理
 // =====================================
@@ -6,28 +10,21 @@ const { cloudinary } = require("./cloudinaryClient");
 const crypto = require("crypto");
 
 // =====================================
-// 画像アップロード関数
-// =====================================
-// buffer   : LINEなどから来た画像データ（Buffer）
-// fileName : 元ファイル名（なくてもOK）
-// folder   : Cloudinary内フォルダ名
+// アップロード関数
 // =====================================
 async function uploadToCloudinary(
   buffer,
-  fileName = "unknown.jpg",
+  fileName = "unknown",
   folder = "farm-ai"
 ) {
   try {
-    // =====================================
-    // 入力チェック
-    // =====================================
     if (!buffer) {
       console.error("❌ buffer が空です");
       return null;
     }
 
     // =====================================
-    // ユニークファイル名生成（衝突防止）
+    // ユニーク名
     // =====================================
     const uniqueName =
       Date.now() +
@@ -36,29 +33,29 @@ async function uploadToCloudinary(
       "_" +
       fileName;
 
-    // =====================================
-    // Buffer → Base64変換（Cloudinary用）
-    // =====================================
-    const base64 = buffer.toString("base64");
-    const dataUri = `data:image/jpeg;base64,${base64}`;
+    console.log("🚀 uploading to Cloudinary:", uniqueName);
 
     // =====================================
-    // Cloudinaryへアップロード
+    // ★ 修正：bufferそのままstreamアップロード（最強安定）
     // =====================================
-    const result = await cloudinary.uploader.upload(dataUri, {
-      folder: folder,        // フォルダ分け
-      public_id: uniqueName, // ファイル名
-      resource_type: "image" // 画像として扱う
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: folder,
+          public_id: uniqueName,
+          resource_type: "auto", // ← 重要（画像・PDF全部OK）
+        },
+        (error, result) => {
+          if (error) return reject(error);
+          resolve(result);
+        }
+      );
+
+      stream.end(buffer);
     });
 
-    // =====================================
-    // 成功ログ
-    // =====================================
     console.log("✅ Cloudinary upload success:", result.secure_url);
 
-    // =====================================
-    // URL返却
-    // =====================================
     return result.secure_url;
 
   } catch (err) {

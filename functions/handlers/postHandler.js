@@ -5,9 +5,14 @@
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 
 // ================================
-// 🔥 Firebase → Cloudinaryへ変更
+// Cloudinary
 // ================================
 const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
+
+// ================================
+// ★ 追加：LINE画像取得
+// ================================
+const { downloadLineMedia } = require("../utils/downloadLineMedia");
 
 const { generateTags } = require("../utils/tagger");
 const { extractTextFromImage } = require("../utils/ocr");
@@ -21,7 +26,9 @@ async function handlePost({
   imageIds = [],
   fileIds = [],
 }) {
-  console.log("handlePost:", text);
+  console.log("📝 handlePost:", text);
+  console.log("🖼 imageIds:", imageIds);
+  console.log("📎 fileIds:", fileIds);
 
   try {
     const safeText = text && text.trim() !== "" ? text : "（テキストなし）";
@@ -32,11 +39,13 @@ async function handlePost({
     const uploadTasks = [];
 
     // ================================
-    // 画像処理
+    // 🖼️ 画像処理
     // ================================
     for (const id of imageIds) {
       uploadTasks.push(
         (async () => {
+          console.log("➡️ image処理開始:", id);
+
           const buffer = await downloadLineMedia(id);
           if (!buffer) return null;
 
@@ -44,7 +53,7 @@ async function handlePost({
 
           return await uploadToCloudinary(
             buffer,
-            `img_${now}_${id}.jpg`,
+            `img_${now}_${id}`,
             "farm-ai"
           );
         })()
@@ -52,11 +61,13 @@ async function handlePost({
     }
 
     // ================================
-    // ファイル処理
+    // 📎 ファイル処理
     // ================================
     for (const id of fileIds) {
       uploadTasks.push(
         (async () => {
+          console.log("➡️ file処理開始:", id);
+
           const buffer = await downloadLineMedia(id);
           if (!buffer) return null;
 
@@ -77,10 +88,10 @@ async function handlePost({
     const results = await Promise.all(uploadTasks);
     const fileUrls = results.filter(Boolean);
 
-    console.log("uploaded files (Cloudinary):", fileUrls);
+    console.log("☁️ uploaded files:", fileUrls);
 
     // =====================================================
-    // 🔍 OCR処理（Cloudinary URL対応）
+    // 🔍 OCR処理
     // =====================================================
     let ocrText = "";
 
@@ -104,29 +115,12 @@ async function handlePost({
     // ================================
     const finalText = safeText + (ocrText ? "\n\n" + ocrText : "");
 
-    console.log("finalText:", finalText);
+    console.log("📄 finalText:", finalText);
 
     // ================================
     // タグ生成
     // ================================
     const tags = await generateTags(finalText);
-
-    // ================================
-    // LINE返信（必要なら）
-    // ================================
-    /*
-    if (replyToken) {
-      await client.replyMessage({
-        replyToken,
-        messages: [
-          {
-            type: "text",
-            text: "保存＋解析したよ🧠",
-          },
-        ],
-      });
-    }
-    */
 
     // ================================
     // Notion保存（非同期）
@@ -137,18 +131,18 @@ async function handlePost({
           title: "LINE投稿",
           content: finalText,
           tags,
-          files: fileUrls, // Cloudinary URL
+          files: fileUrls,
         });
 
-        console.log("Notion saved");
+        console.log("✅ Notion saved");
 
       } catch (err) {
-        console.error("Notion save error:", err);
+        console.error("🔥 Notion save error:", err);
       }
     });
 
   } catch (err) {
-    console.error("handlePost error:", err);
+    console.error("🔥 handlePost error:", err);
   }
 }
 
