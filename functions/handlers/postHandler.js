@@ -5,24 +5,10 @@
 const { buildTags } = require("../utils/tagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 
-// ================================
-// Cloudinary
-// ================================
 const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
-
-// ================================
-// LINE画像取得
-// ================================
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
-
-// ================================
-// OCR
-// ================================
 const { extractTextFromImage } = require("../utils/ocr");
 
-// ================================
-// Groq AI
-// ================================
 const Groq = require("groq-sdk");
 
 const client = new Groq({
@@ -30,7 +16,7 @@ const client = new Groq({
 });
 
 // ================================
-// 🧠 AI関数
+// AI
 // ================================
 async function generateText(prompt) {
   try {
@@ -41,44 +27,22 @@ async function generateText(prompt) {
     });
 
     return res.choices[0].message.content.trim();
-
   } catch (err) {
-    console.error("generateText error:", err);
-    return "（AI生成エラー）";
+    console.error(err);
+    return "（AIエラー）";
   }
 }
 
 // ================================
-// Vision風生成
+// Vision風
 // ================================
 async function generateVisionText({ prompt, images = [] }) {
-  const imageInfo = images.length
-    ? `\n画像URL:\n${images.join("\n")}`
-    : "";
-
-  return generateText(prompt + imageInfo);
+  const img = images.length ? `\n${images.join("\n")}` : "";
+  return generateText(prompt + img);
 }
 
 // ================================
-// 🌱 基本理念
-// ================================
-const baseConcept = `
-便利すぎる世界で、
-人は少しだけ弱くなった気がする。
-ボタンひとつで何でもできるけど、
-手で触れることを大切にしたい。
-`;
-
-// ================================
-// 🎯 人格
-// ================================
-const corePrompt = `
-あなたは自然と手仕事を大切にする書き手。
-X投稿用に128〜138文字で出力。
-`;
-
-// ================================
-// 📌 投稿処理
+// 投稿
 // ================================
 async function handlePost({
   text = "",
@@ -86,18 +50,14 @@ async function handlePost({
   imageIds = [],
   fileIds = [],
 }) {
-  console.log("📝 handlePost:", text);
-
   try {
     const safeText = text?.trim() || "";
 
     // ================================
-    // ☁️ upload
+    // upload（修正済み）
     // ================================
-    const uploadTasks = [];
-
-    for (const id of [...imageIds, ...fileIds]) {
-      uploadTasks.push(async () => {
+    const fileUrls = await Promise.all(
+      [...imageIds, ...fileIds].map(async (id) => {
         const buffer = await downloadLineMedia(id);
         if (!buffer) return null;
 
@@ -106,60 +66,44 @@ async function handlePost({
           `file_${Date.now()}_${id}`,
           "farm-ai"
         );
-      });
-    }
-
-    const fileUrls = (await Promise.all(uploadTasks)).filter(Boolean);
+      })
+    ).then(res => res.filter(Boolean));
 
     // ================================
-    // 🔍 OCR
+    // OCR
     // ================================
     let ocrText = "";
 
     for (const url of fileUrls) {
       try {
-        const extracted = await extractTextFromImage(url);
-        if (extracted) ocrText += extracted + "\n";
-      } catch (e) {
-        console.error("OCR error:", e);
-      }
+        const t = await extractTextFromImage(url);
+        if (t) ocrText += t + "\n";
+      } catch {}
     }
 
     // ================================
-    // 🧠 AI生成1
+    // AI
     // ================================
-    let draft;
+    const draft = await generateVisionText({
+      prompt: `${safeText}`,
+      images: fileUrls,
+    });
 
-    if (fileUrls.length > 0) {
-      draft = await generateVisionText({
-        prompt: `${corePrompt}\n${baseConcept}\n${safeText}`,
-        images: fileUrls,
-      });
-    } else {
-      draft = await generateText(`${corePrompt}\n${baseConcept}\n${safeText}`);
-    }
-
-    // ================================
-    // ✨ AI生成2
-    // ================================
     const finalPost = await generateText(`
-以下をX投稿に整形：
-・138文字以内
-・余韻重視
-
+138文字以内で整形：
 ${draft}
 `);
 
     // ================================
-    // 🏷 タグ（★ここが修正ポイント）
+    // 🏷 TAG
     // ================================
     const tags = await buildTags({
       text: finalPost,
-      type: "投稿"
+      type: "投稿",
     });
 
     // ================================
-    // 💾 Notion
+    // NOTION
     // ================================
     setImmediate(async () => {
       await saveMsgToNotion({
@@ -172,8 +116,8 @@ ${draft}
       });
     });
 
-  } catch (err) {
-    console.error("🔥 handlePost error:", err);
+  } catch (e) {
+    console.error(e);
   }
 }
 

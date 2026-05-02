@@ -5,24 +5,10 @@
 const { buildTags } = require("../utils/tagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 
-// ================================
-// Cloudinary
-// ================================
 const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
-
-// ================================
-// LINE
-// ================================
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
-
-// ================================
-// OCR
-// ================================
 const { extractTextFromImage } = require("../utils/ocr");
 
-// ================================
-// Groq
-// ================================
 const Groq = require("groq-sdk");
 
 const client = new Groq({
@@ -41,42 +27,25 @@ async function generateText(prompt) {
     });
 
     return res.choices[0].message.content.trim();
-
-  } catch (err) {
-    console.error("generateText error:", err);
-    return "（AIエラー）";
+  } catch {
+    return "";
   }
 }
 
 // ================================
-// テキスト整形
-// ================================
-function cleanText(text) {
-  return (text || "")
-    .replace(/\n/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-// ================================
-// OCR handler
+// OCR
 // ================================
 async function handleOCR({
   text = "",
-  replyToken,
   imageIds = [],
   fileIds = [],
 }) {
-  console.log("📖 handleOCR start");
-
   try {
     // ================================
-    // upload
+    // upload（修正）
     // ================================
-    const uploadTasks = [];
-
-    for (const id of [...imageIds, ...fileIds]) {
-      uploadTasks.push(async () => {
+    const fileUrls = await Promise.all(
+      [...imageIds, ...fileIds].map(async (id) => {
         const buffer = await downloadLineMedia(id);
         if (!buffer) return null;
 
@@ -85,12 +54,8 @@ async function handleOCR({
           `ocr_${Date.now()}_${id}`,
           "book-ocr"
         );
-      });
-    }
-
-    const fileUrls = (await Promise.all(uploadTasks)).filter(Boolean);
-
-    if (fileUrls.length === 0) return;
+      })
+    ).then(res => res.filter(Boolean));
 
     // ================================
     // OCR
@@ -98,69 +63,45 @@ async function handleOCR({
     let raw = "";
 
     for (const url of fileUrls) {
-      try {
-        const t = await extractTextFromImage(url);
-        if (t) raw += t + "\n";
-      } catch (e) {
-        console.error(e);
-      }
+      const t = await extractTextFromImage(url);
+      if (t) raw += t + "\n";
     }
 
-    const cleanedText = cleanText(raw);
+    const cleanedText = raw.trim();
 
     // ================================
     // AI
     // ================================
-    const aiResult = await generateText(`
-要約と感想をJSONで出力：
-
-{
-  "summary": "",
-  "impression": ""
-}
-
-本文：
+    const ai = await generateText(`
+要約と感想：
 ${cleanedText}
 `);
 
-    let summary = "";
-    let impression = "";
-
-    try {
-      const json = aiResult.match(/\{[\s\S]*\}/);
-      const parsed = JSON.parse(json ? json[0] : aiResult);
-
-      summary = parsed.summary || "";
-      impression = parsed.impression || "";
-    } catch (e) {
-      summary = aiResult;
-    }
-
     // ================================
-    // 🏷 タグ（★修正）
+    // TAG（ここ重要）
     // ================================
     const tags = await buildTags({
       text: cleanedText,
-      type: "OCR"
+      type: "OCR",
     });
 
     // ================================
-    // Notion
+    // NOTION（type修正）
     // ================================
     setImmediate(async () => {
       await saveMsgToNotion({
         title: "OCR読書ログ",
         userText: text,
-        aiText: `${summary}\n\n${impression}`,
+        aiText: ai,
         ocrText: cleanedText,
         files: fileUrls,
         tags,
-        type: "book",
+        type: "OCR",
       });
     });
 
-  } catch (err) {
-    console.error("🔥 handleOCR error:", err);
+  } catch (e) {
+    console.error(e);
   }
 }
 
