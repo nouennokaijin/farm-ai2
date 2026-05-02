@@ -62,20 +62,38 @@ async function handleOCR({
   try {
 
     // ================================
+    // 🧠 処理開始ログ（追加）
+    // ================================
+    console.log("🚀 OCR HANDLER START");
+    console.log("📩 input text:", text);
+    console.log("🖼 imageIds:", imageIds);
+    console.log("📎 fileIds:", fileIds);
+
+    // ================================
     // 📤 LINE画像取得 → Cloudinary保存
     // ================================
     const fileUrls = await Promise.all(
       [...imageIds, ...fileIds].map(async (id) => {
-        const buffer = await downloadLineMedia(id);
-        if (!buffer) return null;
+        console.log("⬇️ downloading media:", id);
 
-        return uploadToCloudinary(
+        const buffer = await downloadLineMedia(id);
+        if (!buffer) {
+          console.log("⚠️ download failed:", id);
+          return null;
+        }
+
+        const url = await uploadToCloudinary(
           buffer,
           `ocr_${Date.now()}_${id}`,
           "book-ocr"
         );
+
+        console.log("☁️ uploaded to Cloudinary:", url);
+        return url;
       })
     ).then(res => res.filter(Boolean));
+
+    console.log("📦 fileUrls:", fileUrls);
 
     // ================================
     // 🔍 OCR処理（複数画像対応）
@@ -84,7 +102,12 @@ async function handleOCR({
     let refinedText = "";
 
     for (const url of fileUrls) {
+      console.log("🔍 OCR START:", url);
+
       const result = await smartOCR(url);
+
+      console.log("🧾 OCR RAW RESULT:", result?.rawText);
+      console.log("✨ OCR REFINED RESULT:", result?.refinedText);
 
       rawText += (result.rawText || "") + "\n";
       refinedText += (result.refinedText || "") + "\n";
@@ -92,10 +115,16 @@ async function handleOCR({
 
     const cleanedText = refinedText.trim() || rawText.trim();
 
+    console.log("📄 CLEANED TEXT:", cleanedText);
+
     // ================================
     // 🧠 AI意味解析（要約・構造化）
     // ================================
+    console.log("🤖 AI INPUT:", cleanedText);
+
     const aiText = await generateInsight(cleanedText);
+
+    console.log("🧠 AI OUTPUT:", aiText);
 
     // ================================
     // 🏷 タグ生成（固定ルール）
@@ -105,10 +134,14 @@ async function handleOCR({
       type: "OCR",
     });
 
+    console.log("🏷 TAGS:", tags);
+
     // ================================
     // 🧾 Notion保存（非同期書き込み）
     // ================================
     setImmediate(async () => {
+      console.log("📤 SAVING TO NOTION...");
+
       await saveMsgToNotion({
         title: "OCRログ（強化版）",
 
@@ -126,7 +159,7 @@ async function handleOCR({
         // ============================
         // 🤖 AI要約レイヤー
         // ============================
-        aiText,   // ← ここ重要（saveMsgToNotionと一致）
+        aiText,
 
         // ============================
         // 📎 画像URL
@@ -140,6 +173,8 @@ async function handleOCR({
 
         type: "OCR",
       });
+
+      console.log("✅ NOTION SAVE DONE");
     });
 
   } catch (e) {
