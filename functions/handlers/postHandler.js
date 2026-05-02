@@ -20,11 +20,51 @@ const { downloadLineMedia } = require("../utils/downloadLineMedia");
 const { generateTags } = require("../utils/tagger");
 const { extractTextFromImage } = require("../utils/ocr");
 
-// ★ AI（テキスト & 画像対応）
-const { generateText, generateVisionText } = require("../utils/ai");
+// ================================
+// ★ AIクライアント（Groq）
+// ================================
+const Groq = require("groq-sdk");
+
+const client = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
 
 // ================================
-// 🧭 基本理念（投稿の軸）
+// 🧠 AI関数（内蔵）
+// ================================
+async function generateText(prompt) {
+  try {
+    const res = await client.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
+    });
+
+    return res.choices[0].message.content.trim();
+
+  } catch (err) {
+    console.error("generateText error:", err);
+    return "（AI生成エラー）";
+  }
+}
+
+// ※疑似Vision（URLをヒントにする）
+async function generateVisionText({ prompt, images = [] }) {
+  try {
+    const imageInfo = images.length
+      ? `\n参考画像URL:\n${images.join("\n")}`
+      : "";
+
+    return await generateText(prompt + imageInfo);
+
+  } catch (err) {
+    console.error("generateVisionText error:", err);
+    return "（画像AI生成エラー）";
+  }
+}
+
+// ================================
+// 🧭 基本理念
 // ================================
 const baseConcept = `
 便利すぎる世界で、
@@ -38,7 +78,7 @@ const baseConcept = `
 `;
 
 // ================================
-// 🎯 AIの人格定義（ブレ防止）
+// 🎯 AI人格
 // ================================
 const corePrompt = `
 あなたは、自然や手仕事の価値を大切にする書き手です。
@@ -67,35 +107,16 @@ async function handlePost({
   fileIds = [],
 }) {
   console.log("📝 handlePost:", text);
-  console.log("🖼 imageIds:", imageIds);
-  console.log("📎 fileIds:", fileIds);
 
   try {
     const safeText = text && text.trim() !== "" ? text : "";
 
     // =====================================================
-    // ☁️ Cloudinaryアップロード（並列）
+    // ☁️ アップロード
     // =====================================================
     const uploadTasks = [];
 
-    // 🖼️ 画像
-    for (const id of imageIds) {
-      uploadTasks.push(
-        (async () => {
-          const buffer = await downloadLineMedia(id);
-          if (!buffer) return null;
-
-          return await uploadToCloudinary(
-            buffer,
-            `img_${Date.now()}_${id}`,
-            "farm-ai"
-          );
-        })()
-      );
-    }
-
-    // 📎 ファイル
-    for (const id of fileIds) {
+    for (const id of [...imageIds, ...fileIds]) {
       uploadTasks.push(
         (async () => {
           const buffer = await downloadLineMedia(id);
@@ -110,83 +131,62 @@ async function handlePost({
       );
     }
 
-    const results = await Promise.all(uploadTasks);
-    const fileUrls = results.filter(Boolean);
-
-    console.log("☁️ uploaded files:", fileUrls);
+    const fileUrls = (await Promise.all(uploadTasks)).filter(Boolean);
 
     // =====================================================
-    // 🔍 OCR処理
+    // 🔍 OCR
     // =====================================================
     let ocrText = "";
 
     for (const url of fileUrls) {
       try {
-        if (!url.includes("res.cloudinary.com")) continue;
-
         const extracted = await extractTextFromImage(url);
-
-        if (extracted && extracted.trim()) {
-          ocrText += extracted + "\n";
-        }
-
-      } catch (err) {
-        console.error("OCR error:", err);
+        if (extracted) ocrText += extracted + "\n";
+      } catch (e) {
+        console.error("OCR error:", e);
       }
     }
 
     // =====================================================
-    // 🧠 AI投稿生成（ここが今回のコア）
+    // 🧠 AI生成（1段目）
     // =====================================================
-    let draft = "";
+    let draft;
 
     if (fileUrls.length > 0) {
-      // ================================
-      // 🖼️ 画像あり（Vision）
-      // ================================
       draft = await generateVisionText({
         prompt: `
 ${corePrompt}
 
-以下の理念と、画像・テキストをもとに投稿文を作成してください。
-
 【理念】
 ${baseConcept}
 
-【テキスト】
+【入力】
 ${safeText || "（テキストなし）"}
         `,
         images: fileUrls
       });
-
     } else {
-      // ================================
-      // 📝 テキストのみ
-      // ================================
       draft = await generateText(`
 ${corePrompt}
-
-以下の理念と内容をもとに投稿文を作成してください。
 
 【理念】
 ${baseConcept}
 
-【内容】
+【入力】
 ${safeText}
 `);
     }
 
-    // ================================
-    // ✨ 2段階目（仕上げ）
-    // ================================
+    // =====================================================
+    // ✨ AI生成（2段目）
+    // =====================================================
     const finalPost = await generateText(`
-以下の文章をX投稿用として最適化してください。
+以下をX投稿として仕上げてください。
 
-【ルール】
 ・138文字以内
-・読みやすく整える
+・自然な流れ
 ・冗長削除
-・自然な余韻を残す
+・余韻を残す
 
 文章：
 ${draft}
@@ -195,38 +195,22 @@ ${draft}
     console.log("🧾 finalPost:", finalPost);
 
     // =====================================================
-    // 🏷 タグ生成（AI投稿ベース）
+    // 🏷 タグ
     // =====================================================
     const tags = await generateTags(finalPost);
 
     // =====================================================
-    // 💾 Notion保存（非同期）
+    // 💾 Notion保存
     // =====================================================
     setImmediate(async () => {
-      try {
-        await saveMsgToNotion({
-          title: "LINE投稿",
-
-          // 本文（ユーザー入力）
-          userText: safeText,
-
-          // AI生成文
-          aiText: finalPost,
-
-          // OCR
-          ocrText: ocrText,
-
-          // ファイル
-          files: fileUrls,
-
-          tags,
-        });
-
-        console.log("✅ Notion saved");
-
-      } catch (err) {
-        console.error("🔥 Notion save error:", err);
-      }
+      await saveMsgToNotion({
+        title: "LINE投稿",
+        userText: safeText,
+        aiText: finalPost,
+        ocrText,
+        files: fileUrls,
+        tags,
+      });
     });
 
   } catch (err) {
