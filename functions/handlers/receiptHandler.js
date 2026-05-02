@@ -2,7 +2,7 @@
 // 2026/5/2
 // Okiura Kazuo
 
-const { generateReceiptTags } = require("../utils/receiptTagger");
+const { generateReceiptTags } = require("../utils/tagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 
 // =====================================
