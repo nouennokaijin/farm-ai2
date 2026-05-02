@@ -17,7 +17,7 @@ const { handleOCR } = require("../handlers/ocrHandler");
 const { logUnclassified } = require("../utils/chatLogger");
 
 // 🖼 smart OCR（追加）
-const { smartOCR } = require("../services/smartOCR");
+const { smartOCR } = require("./smartOCR");
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
 
 // ================================
