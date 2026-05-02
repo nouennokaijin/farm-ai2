@@ -1,8 +1,7 @@
 // services/smartOCR.js
 // 2026/5/2
-// Okiura Kazuo
+// Okiura Kazuo（改良版：URL統一・安定OCR）
 
-const sharp = require("sharp");
 const { extractTextFromImage } = require("../utils/ocr");
 const Groq = require("groq-sdk");
 
@@ -14,42 +13,15 @@ const client = new Groq({
 });
 
 // ================================
-// ① 画像前処理（人間の目に寄せる）
+// ① OCR実行（URL専用）
 // ================================
-async function preprocessImage(buffer) {
+async function runOCR(imageUrl) {
   try {
-    const processed = await sharp(buffer)
-      // ノイズ軽減
-      .median(1)
+    if (!imageUrl || typeof imageUrl !== "string") {
+      throw new Error("invalid imageUrl");
+    }
 
-      // コントラスト強化（文字浮き上がり）
-      .modulate({
-        brightness: 1.1,
-        contrast: 1.4,
-        saturation: 1.0,
-      })
-
-      // シャープネス
-      .sharpen()
-
-      // グレースケール化（OCR安定化）
-      .grayscale()
-
-      .toBuffer();
-
-    return processed;
-  } catch (e) {
-    console.error("image preprocess error:", e);
-    return buffer; // fallback
-  }
-}
-
-// ================================
-// ② OCR実行
-// ================================
-async function runOCR(buffer) {
-  try {
-    return await extractTextFromImage(buffer);
+    return await extractTextFromImage(imageUrl);
   } catch (e) {
     console.error("OCR error:", e);
     return "";
@@ -57,10 +29,10 @@ async function runOCR(buffer) {
 }
 
 // ================================
-// ③ AIによる「人間的読み直し」
+// ② AI補正（意味復元）
 // ================================
 async function refineText(rawText) {
-  if (!rawText || rawText.trim().length === 0) return "";
+  if (!rawText?.trim()) return "";
 
   try {
     const res = await client.chat.completions.create({
@@ -71,14 +43,13 @@ async function refineText(rawText) {
         {
           role: "system",
           content: `
-あなたはOCRの誤認識を修正するリーダーです。
+あなたはOCRの誤認識修正エンジンです。
 
-役割：
-- 崩れた文字を自然な日本語に復元
-- レシート・メモ・投稿の意味を補正
-- ただし情報は追加しない（推測禁止）
-
-出力は「修正後テキストのみ」
+ルール：
+- 文字の崩れを自然な日本語に修正
+- 意味の補完はしない
+- 追加情報は禁止
+- 出力は修正後テキストのみ
           `.trim(),
         },
         {
@@ -96,23 +67,29 @@ async function refineText(rawText) {
 }
 
 // ================================
-// ④ メインOCRパイプライン
+// ③ メインOCRパイプライン（URL統一版）
 // ================================
-async function smartOCR(imageBuffer) {
+async function smartOCR(imageUrl) {
   try {
-    // Step1: 前処理
-    const optimized = await preprocessImage(imageBuffer);
+    // Step1: OCR（URL直接）
+    const rawText = await runOCR(imageUrl);
 
-    // Step2: OCR
-    const rawText = await runOCR(optimized);
+    if (!rawText) {
+      console.warn("⚠️ OCR returned empty text");
+      return {
+        rawText: "",
+        refinedText: "",
+      };
+    }
 
-    // Step3: AI補正
-    const refined = await refineText(rawText);
+    // Step2: AI補正
+    const refinedText = await refineText(rawText);
 
     return {
       rawText,
-      refinedText: refined,
+      refinedText,
     };
+
   } catch (e) {
     console.error("smartOCR fatal error:", e);
 

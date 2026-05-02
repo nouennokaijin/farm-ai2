@@ -1,6 +1,6 @@
 // handlers/ocrHandler.js
 // 2026/5/2
-// Okiura Kazuo
+// Okiura Kazuo（改良版：OCR安定化＋データ汚染防止）
 
 const { buildTags } = require("../utils/tagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
@@ -8,7 +8,7 @@ const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
 
-// 🧠 OCRエンジン（画像→構造化テキスト）
+// 🧠 OCRエンジン
 const { smartOCR } = require("../secretary/smartOCR");
 
 const Groq = require("groq-sdk");
@@ -18,30 +18,30 @@ const client = new Groq({
 });
 
 // ================================
-// 🤖 AI（OCR後の意味整理・要約層）
+// 🤖 AI（OCR後の意味整理）
 // ================================
 async function generateInsight(text) {
   try {
     const res = await client.chat.completions.create({
       model: "llama-3.3-70b-versatile",
+      temperature: 0.3,
       messages: [
         {
           role: "system",
           content: `
 あなたはOCR後の意味理解エンジンです。
 
-やること：
+役割：
 - 要約
-- 情報の整理
+- 情報整理
 - 重要ポイント抽出
 
-※推測は禁止
-※追加情報の創作禁止
+※推測禁止
+※創作禁止
           `.trim(),
         },
         { role: "user", content: text },
       ],
-      temperature: 0.3,
     });
 
     return res?.choices?.[0]?.message?.content?.trim() || "";
@@ -62,7 +62,7 @@ async function handleOCR({
   try {
 
     // ================================
-    // 🚀 START LOG（全体監視）
+    // 🚀 START LOG
     // ================================
     console.log("🚀 OCR HANDLER START");
     console.log("📩 input text:", text);
@@ -70,14 +70,14 @@ async function handleOCR({
     console.log("📎 fileIds:", fileIds);
 
     // ================================
-    // ⚠️ 入力チェック（重要）
+    // ⚠️ 入力チェック
     // ================================
-    if ((!imageIds || imageIds.length === 0) && (!fileIds || fileIds.length === 0)) {
-      console.warn("⚠️ WARNING: no image/file input → OCR will NOT run");
+    if ((!imageIds?.length) && (!fileIds?.length)) {
+      console.warn("⚠️ no image/file input → OCR skipped possibility");
     }
 
     // ================================
-    // 📤 LINE画像取得 → Cloudinary保存
+    // 📤 LINE画像 → Cloudinary
     // ================================
     const fileUrls = await Promise.all(
       [...imageIds, ...fileIds].map(async (id) => {
@@ -96,7 +96,7 @@ async function handleOCR({
           "book-ocr"
         );
 
-        console.log("☁️ uploaded to Cloudinary:", url);
+        console.log("☁️ uploaded:", url);
         return url;
       })
     ).then(res => res.filter(Boolean));
@@ -104,14 +104,15 @@ async function handleOCR({
     console.log("📦 fileUrls:", fileUrls);
 
     // ================================
-    // ⚠️ OCR入力チェック
+    // ⚠️ OCR停止条件（重要）
     // ================================
     if (fileUrls.length === 0) {
-      console.error("❌ OCR SKIPPED: no valid uploaded images");
+      console.error("❌ OCR STOP: no valid images");
+      return; // ← ここ重要（無駄AI防止）
     }
 
     // ================================
-    // 🔍 OCR処理（複数画像対応）
+    // 🔍 OCR処理
     // ================================
     let rawText = "";
     let refinedText = "";
@@ -121,14 +122,11 @@ async function handleOCR({
 
       const result = await smartOCR(url);
 
-      // ================================
-      // 🧠 OCR結果ログ（完全可視化）
-      // ================================
-      console.log("🧾 OCR RAW RESULT:", result?.rawText);
+      console.log("📄 OCR RAW RESULT:", result?.rawText);
       console.log("✨ OCR REFINED RESULT:", result?.refinedText);
 
       if (!result?.rawText) {
-        console.warn("⚠️ OCR returned empty rawText");
+        console.warn("⚠️ empty OCR result");
       }
 
       rawText += (result?.rawText || "") + "\n";
@@ -136,19 +134,22 @@ async function handleOCR({
     }
 
     // ================================
-    // 🧠 OCR採用ルール（重要）
+    // 🧠 OCR採用ロジック（修正済み）
     // ================================
     const cleanedText =
-      rawText.trim() || refinedText.trim() || text.trim();
+      rawText?.trim() ||
+      refinedText?.trim() ||
+      "";
 
     console.log("📄 FINAL OCR TEXT:", cleanedText);
 
     if (!cleanedText) {
-      console.error("❌ NO TEXT AVAILABLE (OCR + input all empty)");
+      console.error("❌ NO OCR TEXT GENERATED");
+      return;
     }
 
     // ================================
-    // 🤖 AI解析（意味化）
+    // 🤖 AI解析
     // ================================
     console.log("🤖 AI INPUT:", cleanedText);
 
@@ -167,27 +168,21 @@ async function handleOCR({
     console.log("🏷 TAGS:", tags);
 
     // ================================
-    // 🧾 Notion保存
+    // 💾 Notion保存
     // ================================
     setImmediate(async () => {
       console.log("📤 SAVING TO NOTION...");
 
       await saveMsgToNotion({
-        title: "OCRログ（強化版）",
+        title: "OCRログ",
 
         userText: text,
 
-        // 🔍 OCRレイヤー（raw優先構造）
         rawOCR: rawText,
         ocrText: cleanedText,
 
-        // 🤖 AI要約
         aiText,
-
-        // 📎 画像URL
         files: fileUrls,
-
-        // 🏷 タグ
         tags,
 
         type: "OCR",
