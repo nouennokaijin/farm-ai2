@@ -16,7 +16,7 @@ const client = new Groq({
 });
 
 // ================================
-// AI
+// 🤖 AI（補助役：要約生成のみ）
 // ================================
 async function generateText(prompt) {
   try {
@@ -33,7 +33,7 @@ async function generateText(prompt) {
 }
 
 // ================================
-// OCR
+// 📖 OCRハンドラー本体
 // ================================
 async function handleOCR({
   text = "",
@@ -41,8 +41,9 @@ async function handleOCR({
   fileIds = [],
 }) {
   try {
+
     // ================================
-    // upload（修正）
+    // 📤 LINE画像 → Cloudinaryアップロード
     // ================================
     const fileUrls = await Promise.all(
       [...imageIds, ...fileIds].map(async (id) => {
@@ -58,7 +59,7 @@ async function handleOCR({
     ).then(res => res.filter(Boolean));
 
     // ================================
-    // OCR
+    // 🔍 OCR抽出（事実データ）
     // ================================
     let raw = "";
 
@@ -70,38 +71,61 @@ async function handleOCR({
     const cleanedText = raw.trim();
 
     // ================================
-    // AI
+    // 🤖 AI処理（補助：要約のみ）
     // ================================
     const ai = await generateText(`
-要約と感想：
+以下の内容を要約し、気づきを短くまとめてください：
+
 ${cleanedText}
 `);
 
     // ================================
-    // TAG（ここ重要）
+    // 🏷 タグ生成（ここが設計の核心）
     // ================================
+    // 🔥 重要ルール：
+    // typeが存在する場合 → 分類は100%固定（AI介入なし）
+    // AIはタグ決定に関与しない
     const tags = await buildTags({
       text: cleanedText,
+
+      // ============================
+      // 👑 王（最終決定権）
+      // ============================
       type: "OCR",
     });
 
     // ================================
-    // NOTION（type修正）
+    // 🧾 Notion保存
     // ================================
     setImmediate(async () => {
       await saveMsgToNotion({
         title: "OCR読書ログ",
-        userText: text,
+
+        // ============================
+        // 🧠 情報レイヤー分離
+        // ============================
+
+        userText: text,          // ユーザー入力（指示）
+        ocrText: cleanedText,    // OCR結果（現実データ）
+
+        // ============================
+        // 🤖 AIは補助情報のみ
+        // ============================
         aiText: ai,
-        ocrText: cleanedText,
+
         files: fileUrls,
+
+        // ============================
+        // 🏷 タグ（王の決定結果）
+        // ============================
         tags,
+
         type: "OCR",
       });
     });
 
   } catch (e) {
-    console.error(e);
+    console.error("OCR handler error:", e);
   }
 }
 
