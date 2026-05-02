@@ -1,19 +1,19 @@
-// handlers/postHandler.js
+// handlers/ocrHandler.js
 // 2026/5/2
 // Okiura Kazuo
+
 
 const { buildTags } = require("../utils/tagger");
 
 const tags = await buildTags({
-  text: finalPost,
-  type: "投稿"
+  text: cleanedText,
+  type: "OCR"
 });
-
 
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 
 // ================================
-// Cloudinary
+// Cloudinary（画像保存）
 // ================================
 const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 
@@ -23,9 +23,8 @@ const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
 
 // ================================
-// 各種ユーティリティ
+// OCR（画像 → テキスト）
 // ================================
-const { generateTags } = require("../utils/tagger");
 const { extractTextFromImage } = require("../utils/ocr");
 
 // ================================
@@ -56,71 +55,31 @@ async function generateText(prompt) {
   }
 }
 
-// ※疑似Vision（URLをヒントにする）
-async function generateVisionText({ prompt, images = [] }) {
-  try {
-    const imageInfo = images.length
-      ? `\n参考画像URL:\n${images.join("\n")}`
-      : "";
-
-    return await generateText(prompt + imageInfo);
-
-  } catch (err) {
-    console.error("generateVisionText error:", err);
-    return "（画像AI生成エラー）";
-  }
+// ================================
+// 🧹 OCRテキスト整形
+// ================================
+function cleanText(text) {
+  if (!text) return "";
+  return text
+    .replace(/\n/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // ================================
-// 🧭 基本理念
+// 📖 OCR処理ハンドラ
 // ================================
-const baseConcept = `
-便利すぎる世界で、
-人は少しだけ弱くなった気がする。
-ボタンひとつで何でもできるけど、
-手で触れることを大切にしたい。
-ゆっくりでいい。
-完璧じゃなくていい。
-少しくらい間違ってもいい。
-きっと大地は、そんなこと気にしない。
-`;
-
-// ================================
-// 🎯 AI人格
-// ================================
-const corePrompt = `
-あなたは、自然や手仕事の価値を大切にする書き手です。
-
-【価値観】
-・便利さに流されすぎない
-・手で触れることを大切にする
-・不完全さを肯定する
-・自然の視点を持つ
-・静かで余韻のある表現
-
-【文章ルール】
-・X投稿用（128〜138文字）
-・自然な日本語
-・言い切りすぎない
-・ポエム寄りだが伝わる文章
-`;
-
-// ================================
-// 投稿処理
-// ================================
-async function handlePost({
+async function handleOCR({
   text = "",
   replyToken,
   imageIds = [],
   fileIds = [],
 }) {
-  console.log("📝 handlePost:", text);
+  console.log("📖 handleOCR start");
 
   try {
-    const safeText = text && text.trim() !== "" ? text : "";
-
     // =====================================================
-    // ☁️ アップロード
+    // ☁️ 画像アップロード
     // =====================================================
     const uploadTasks = [];
 
@@ -132,8 +91,8 @@ async function handlePost({
 
           return await uploadToCloudinary(
             buffer,
-            `file_${Date.now()}_${id}`,
-            "farm-ai"
+            `ocr_${Date.now()}_${id}`,
+            "book-ocr"
           );
         })()
       );
@@ -141,89 +100,97 @@ async function handlePost({
 
     const fileUrls = (await Promise.all(uploadTasks)).filter(Boolean);
 
+    if (fileUrls.length === 0) {
+      console.log("⚠️ 画像なし → OCRスキップ");
+      return;
+    }
+
     // =====================================================
     // 🔍 OCR
     // =====================================================
-    let ocrText = "";
+    let rawOcrText = "";
 
     for (const url of fileUrls) {
       try {
         const extracted = await extractTextFromImage(url);
-        if (extracted) ocrText += extracted + "\n";
+        if (extracted) rawOcrText += extracted + "\n";
       } catch (e) {
         console.error("OCR error:", e);
       }
     }
 
-    // =====================================================
-    // 🧠 AI生成（1段目）
-    // =====================================================
-    let draft;
+    const cleanedText = cleanText(rawOcrText);
 
-    if (fileUrls.length > 0) {
-      draft = await generateVisionText({
-        prompt: `
-${corePrompt}
-
-【理念】
-${baseConcept}
-
-【入力】
-${safeText || "（テキストなし）"}
-        `,
-        images: fileUrls
-      });
-    } else {
-      draft = await generateText(`
-${corePrompt}
-
-【理念】
-${baseConcept}
-
-【入力】
-${safeText}
-`);
+    if (!cleanedText) {
+      console.log("⚠️ OCR結果が空");
     }
 
-    // =====================================================
-    // ✨ AI生成（2段目）
-    // =====================================================
-    const finalPost = await generateText(`
-以下をX投稿として仕上げてください。
+    console.log("📝 OCR TEXT:", cleanedText.slice(0, 200));
 
-・138文字以内
-・自然な流れ
-・冗長削除
-・余韻を残す
+    // =====================================================
+    // 🧠 AI要約＋感想
+    // =====================================================
+    const aiResult = await generateText(`
+あなたは哲学書をわかりやすく解説する専門家です。
 
-文章：
-${draft}
+以下の文章を読んで、要約と感想を出力してください。
+
+# 出力形式（JSON）
+{
+  "summary": "",
+  "impression": ""
+}
+
+# ルール
+・summaryは100〜150文字
+・impressionは100文字前後
+・やさしい言葉で
+
+# 入力
+${cleanedText || "（テキストなし）"}
 `);
 
-    console.log("🧾 finalPost:", finalPost);
+    console.log("🤖 AI RESULT:", aiResult);
 
     // =====================================================
-    // 🏷 タグ
+    // 🧩 JSONパース
     // =====================================================
-    const tags = await generateTags(finalPost);
+    let summary = "";
+    let impression = "";
+
+    try {
+      // JSON部分だけ抽出（安全対策）
+      const jsonMatch = aiResult.match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : aiResult);
+
+      summary = parsed.summary || "";
+      impression = parsed.impression || "";
+
+    } catch (e) {
+      console.error("JSON parse error:", e);
+
+      summary = aiResult;
+      impression = "";
+    }
 
     // =====================================================
     // 💾 Notion保存
     // =====================================================
     setImmediate(async () => {
       await saveMsgToNotion({
-        title: "LINE投稿",
-        userText: safeText,
-        aiText: finalPost,
-        ocrText,
+        title: "OCR読書ログ",
+        userText: text,
+        aiText: `${summary}\n\n${impression}`,
+        ocrText: cleanedText,
         files: fileUrls,
-        tags,
+        tags: ["OCR", "読書"],
+        type: "book"
       });
     });
 
   } catch (err) {
-    console.error("🔥 handlePost error:", err);
+    console.error("🔥 handleOCR error:", err);
   }
 }
 
-module.exports = { handlePost };
+module.exports = { handleOCR };

@@ -1,4 +1,10 @@
 // utils/tagger.js
+// 2026/5/2
+// Okiura Kazuo
+// 目的：
+// ① システムタグを必ず1つ
+// ② 意味タグを最大2つ
+// ③ 順序を固定して返す
 
 const Groq = require("groq-sdk");
 
@@ -6,72 +12,21 @@ const client = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-// ===== 許可タグ（ここだけ触れば全体に効く）=====
-const ALLOWED_TAGS = [
+// ================================
+// 🎯 システムタグ（固定）
+// ================================
+const SYSTEM_TAGS = [
   "投稿",
-  "経費",
+  "レシート",
+  "OCR",
   "予定",
-  "会話",
-  "農業",
-  "SNS",
-  "重要",
-  "その他",
+  "チャット",
 ];
 
-// ===== 同義語マップ（揺れ吸収）=====
-const SYNONYM_MAP = {
-  // 経費系
-  "レシート": "経費",
-  "領収書": "経費",
-  "支出": "経費",
-
-  // 投稿系
-  "ポスト": "投稿",
-  "ツイート": "投稿",
-
-  // 予定系
-  "スケジュール": "予定",
-  "予定表": "予定",
-
-  // 会話系
-  "雑談": "会話",
-  "チャット": "会話",
-};
-
-// ===== 正規化（トリム＋同義語変換＋許可チェック）=====
-function normalizeTags(rawTags = []) {
-  const result = [];
-
-  for (let t of rawTags) {
-    if (!t) continue;
-
-    // 余分な空白削除
-    t = String(t).trim();
-
-    // 同義語変換
-    if (SYNONYM_MAP[t]) {
-      t = SYNONYM_MAP[t];
-    }
-
-    // 許可タグのみ通す
-    if (ALLOWED_TAGS.includes(t)) {
-      if (!result.includes(t)) {
-        result.push(t);
-      }
-    }
-  }
-
-  // 1個も残らなければ「その他」
-  if (result.length === 0) {
-    return ["その他"];
-  }
-
-  // 最大3個まで（暴走防止）
-  return result.slice(0, 3);
-}
-
-// ===== AIタグ生成（複数タグをカンマ区切りで返す想定）=====
-async function generateTags(text) {
+// ================================
+// 🧠 システムタグ判定（AI）
+// ================================
+async function detectSystemTag(text) {
   try {
     const res = await client.chat.completions.create({
       model: "llama-3.3-70b-versatile",
@@ -79,32 +34,132 @@ async function generateTags(text) {
       messages: [
         {
           role: "system",
-          content:
-            "次のタグから最大3つ、カンマ区切りで返す：投稿, 経費, 予定, 会話, 農業, SNS, 重要。不明はその他。",
+          content: `
+次のいずれか1つだけ返してください：
+
+投稿, レシート, OCR, 予定, チャット
+
+不明な場合は「チャット」
+余計な説明は禁止
+          `,
         },
+        { role: "user", content: text || "" },
+      ],
+    });
+
+    const tag = res?.choices?.[0]?.message?.content?.trim();
+
+    // 念のためチェック
+    if (SYSTEM_TAGS.includes(tag)) {
+      return tag;
+    }
+
+    return "チャット";
+
+  } catch (e) {
+    console.error("system tag error:", e);
+    return "チャット";
+  }
+}
+
+// ================================
+// 🌱 意味タグ生成（AI）
+// ================================
+async function generateTopicTags(text) {
+  try {
+    const res = await client.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      temperature: 0.5,
+      messages: [
         {
-          role: "user",
-          content: text || "",
+          role: "system",
+          content: `
+文章のテーマを表す単語を2〜4個出してください。
+
+【ルール】
+・名詞
+・日本語
+・カンマ区切り
+・具体的（例：農業, トマト, 成長）
+・システムタグは禁止（投稿などは出さない）
+          `,
         },
+        { role: "user", content: text || "" },
       ],
     });
 
     const raw = res?.choices?.[0]?.message?.content || "";
 
-    // カンマ区切りで配列化
-    const rawTags = raw.split(",").map(t => t.trim());
+    return raw
+      .split(",")
+      .map(t => t.trim())
+      .filter(t => t.length > 0);
 
-    // 正規化
-    return normalizeTags(rawTags);
-
-  } catch (err) {
-    console.error("tagger error:", err);
-    return ["その他"];
+  } catch (e) {
+    console.error("topic tag error:", e);
+    return [];
   }
 }
 
+// ================================
+// 🧹 意味タグの整形
+// ================================
+function cleanTopicTags(tags = []) {
+  const result = [];
+
+  for (let t of tags) {
+    if (!t) continue;
+
+    // システムタグは除外
+    if (SYSTEM_TAGS.includes(t)) continue;
+
+    // 重複排除
+    if (!result.includes(t)) {
+      result.push(t);
+    }
+  }
+
+  return result;
+}
+
+// ================================
+// 🎯 メイン統合関数
+// ================================
+async function buildTags({ text = "", type = "" }) {
+
+  // ================================
+  // ① システムタグ確定
+  // ================================
+
+  let systemTag = "チャット";
+
+  // typeが指定されていればそれを優先（handlerから渡す）
+  if (type && SYSTEM_TAGS.includes(type)) {
+    systemTag = type;
+  } else {
+    systemTag = await detectSystemTag(text);
+  }
+
+  // ================================
+  // ② 意味タグ生成
+  // ================================
+  const rawTopicTags = await generateTopicTags(text);
+
+  // 整形
+  const topicTags = cleanTopicTags(rawTopicTags);
+
+  // ================================
+  // ③ 最終構成（順序固定）
+  // ================================
+  return [
+    systemTag,
+    ...topicTags.slice(0, 2) // 最大2つ
+  ];
+}
+
 module.exports = {
-  generateTags,
-  normalizeTags,
-  ALLOWED_TAGS,
+  buildTags,
+  generateTopicTags,
+  detectSystemTag,
+  SYSTEM_TAGS,
 };
