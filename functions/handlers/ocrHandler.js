@@ -1,6 +1,6 @@
 // handlers/ocrHandler.js
-// 2026/5/3 改良版（意図一致版）
-// 「OCRは純テキストのみ」「AIは別枠」「混入禁止」
+// 2026/5/3 Tesseract版（完全置換）
+// 「純OCR（機械）＋AI整形分離」構造
 
 const { buildTags } = require("../utils/tagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
@@ -8,58 +8,45 @@ const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
 
-const Groq = require("groq-sdk");
+// 🧠 OCRエンジン（Tesseract）
+const Tesseract = require("tesseract.js");
 
+// 🤖 AI（整形用）
+const Groq = require("groq-sdk");
 const client = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
 
 // ================================
-// 🧠 OCR（純テキスト取得）
+// 🧠 OCR（Tesseract：純機械抽出）
 // ================================
-async function extractTextFromImage(imageUrl) {
-  // 入力チェック（ここで弾く）
-  if (!imageUrl || typeof imageUrl !== "string") {
-    console.error("❌ OCR input invalid:", imageUrl);
-    return "";
-  }
-
-  console.log("🔍 OCR REQUEST:", imageUrl);
-
+async function extractTextFromBuffer(buffer) {
   try {
-    const res = await client.chat.completions.create({
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
-      temperature: 0, // ブレ防止
+    if (!buffer) {
+      console.error("❌ OCR buffer invalid");
+      return "";
+    }
 
-      messages: [
-        {
-          role: "system",
-          content: `
-あなたはOCRエンジンです。
-画像内の文字を一切変更せず、そのまま出力してください。
+    console.log("🔍 OCR START (Tesseract)");
 
-絶対ルール：
-- 補完禁止
-- 解釈禁止
-- 要約禁止
-- 説明禁止
-- 出力はテキストのみ
-          `.trim(),
+    // ================================
+    // 🧠 OCR実行
+    // ================================
+    const result = await Tesseract.recognize(
+      buffer,
+      "jpn+eng", // 日本語＋英語（安定）
+      {
+        logger: (m) => {
+          // デバッグ用進行ログ（重いなら消してOK）
+          if (m.status === "recognizing text") {
+            console.log("⏳ OCR:", Math.floor(m.progress * 100) + "%");
+          }
         },
-        {
-          role: "user",
-          content: [
-            {
-              type: "image_url",
-              image_url: { url: imageUrl },
-            },
-          ],
-        },
-      ],
-    });
+      }
+    );
 
-    const text = res?.choices?.[0]?.message?.content?.trim() || "";
+    const text = result?.data?.text?.trim() || "";
 
     console.log("✅ OCR RESULT:");
     console.log(text);
@@ -74,11 +61,10 @@ async function extractTextFromImage(imageUrl) {
 
 
 // ================================
-// 🤖 AI（整理のみ・創作禁止）
+// 🤖 AI（整形のみ・創作禁止）
 // ================================
 async function generateAI(ocrText) {
   try {
-    // OCR結果だけを入力（画像情報は渡さない）
     const input = `
 以下のテキストをそのまま整形してください。
 
@@ -95,7 +81,7 @@ ${ocrText}
 
     const res = await client.chat.completions.create({
       model: "llama-3.3-70b-versatile",
-      temperature: 0, // ←創作抑制（重要）
+      temperature: 0,
       messages: [
         {
           role: "system",
@@ -126,30 +112,25 @@ async function handleOCR({
     console.log("🚀 OCR HANDLER START");
 
     // ================================
-    // 📤 画像取得 → Cloudinary
+    // 📥 画像取得（buffer）
     // ================================
-    const fileUrls = await Promise.all(
+    const buffers = await Promise.all(
       [...imageIds, ...fileIds].map(async (id) => {
         const buffer = await downloadLineMedia(id);
-        if (!buffer) return null;
-
-        return await uploadToCloudinary(
-          buffer,
-          `ocr_${Date.now()}_${id}`,
-          "book-ocr"
-        );
+        return buffer || null;
       })
     ).then((res) => res.filter(Boolean));
 
-    console.log("📸 Uploaded URLs:", fileUrls);
+    console.log("📸 Buffers count:", buffers.length);
 
     // ================================
-    // 🔍 OCR（複数画像対応）
+    // 🔍 OCR（複数画像）
     // ================================
     let ocrText = "";
 
-    for (const url of fileUrls) {
-      const result = await extractTextFromImage(url);
+    for (const buffer of buffers) {
+      const result = await extractTextFromBuffer(buffer);
+
       if (result) {
         ocrText += (ocrText ? "\n" : "") + result;
       }
@@ -158,7 +139,7 @@ async function handleOCR({
     ocrText = ocrText.trim();
 
     // ================================
-    // 📦 A/B（内部構造用）
+    // 📦 A/B構造（内部用）
     // ================================
     const A = {
       hasText: !!ocrText,
@@ -166,16 +147,15 @@ async function handleOCR({
     };
 
     const B = {
-      description: fileUrls.length ? "画像あり" : "画像なし",
+      description: buffers.length ? "画像あり" : "画像なし",
     };
 
     console.log("📦 A:", A);
     console.log("📦 B:", B);
 
     // ================================
-    // 🤖 AI（C/D）
+    // 🤖 AI（整形）
     // ================================
-    // ⚠️ OCRが空ならAI回さない
     let C = { summary: "文字なし" };
     let D = { summary: B.description };
 
@@ -188,7 +168,7 @@ async function handleOCR({
     console.log("🧠 D:", D);
 
     // ================================
-    // 🏷 タグ
+    // 🏷 タグ生成
     // ================================
     const tags = await buildTags({
       text: A.text,
@@ -196,14 +176,10 @@ async function handleOCR({
     });
 
     // ================================
-    // 📝 Notion保存用データ（ここが重要）
+    // 📝 Notion保存用
     // ================================
-
-    // ✅ OCRは純テキストのみ（メタ情報排除）
-    const OCRprop = A.text;
-
-    // ✅ AIはAIだけ
-    const AIprop = C.summary;
+    const OCRprop = A.text;   // ←純OCRのみ
+    const AIprop = C.summary; // ←AIは別枠
 
     // ================================
     // 📤 保存
@@ -213,7 +189,11 @@ async function handleOCR({
       userText: text,
       ocrText: OCRprop,
       aiText: AIprop,
-      files: fileUrls,
+
+      // 🔥 Cloudinaryは“必要ならだけ”
+      // （今は省略してもOK）
+      files: [],
+
       tags,
       type: "OCR",
     });
