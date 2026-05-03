@@ -1,69 +1,93 @@
 // secretary/dispatcher.js
 // 2026/05/03
-// 📡 LINEイベントの司令塔
+// 📡 LINEイベントの司令塔（安定版）
 
 const axios = require("axios");
-const { handleOCR } = require("../handlers/ocrHandler");
 
 // ================================
-// 📥 LINE画像を取得する関数
+// 🧠 OCRは遅延ロード（循環参照対策）
+// ================================
+let handleOCR = null;
+
+// ================================
+// 📥 LINE画像取得
 // ================================
 /**
- * LINEのmessageIdから画像データを取得する
+ * LINEのmessageIdから画像をBufferで取得
  * @param {string} messageId
- * @returns {Buffer}
+ * @returns {Promise<Buffer>}
  */
 async function downloadLineImage(messageId) {
   const url = `https://api-data.line.me/v2/bot/message/${messageId}/content`;
 
   const res = await axios.get(url, {
-    responseType: "arraybuffer", // ← これ重要（バイナリで取る）
+    responseType: "arraybuffer",
     headers: {
       Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
     },
   });
 
-  // 👇 Bufferに変換（これをOCRに渡す）
   return Buffer.from(res.data);
 }
 
 // ================================
-// 🚀 メインdispatcher
+// 🚀 dispatcher本体
 // ================================
 /**
- * LINEイベントを振り分ける
+ * LINEイベントの振り分け
+ * @param {object} event
  */
 async function dispatcher(event) {
   try {
-    console.log("📥 stream event:", event.message.type);
-
-    // ============================
-    // 🖼 画像の場合（ここが今回の本丸）
-    // ============================
-    if (event.message.type === "image") {
-      console.log("🖼 OCR direct pipeline start");
-
-      // ❗ ここが抜けてたポイント
-      // message.id から画像を取得
-      const imageBuffer = await downloadLineImage(event.message.id);
-
-      // 🧪 デバッグ（ちゃんと取れてるか確認）
-      console.log("isBuffer:", Buffer.isBuffer(imageBuffer));
-
-      // OCRへ渡す
-      const result = await handleOCR(imageBuffer);
-
-      console.log("OCR RESULT:", result);
-
+    // イベント防御
+    if (!event || !event.message) {
+      console.warn("⚠️ invalid event:", event);
       return;
     }
 
+    console.log("📥 stream event:", event.message.type);
+
     // ============================
-    // 📝 テキスト（仮）
+    // 🧠 OCRモジュール遅延ロード（ここが安全ポイント）
+    // ============================
+    if (!handleOCR) {
+      const mod = require("../handlers/ocrHandler");
+
+      // 🔥 export崩れ検知用ガード
+      handleOCR = mod.handleOCR || mod.default || mod;
+
+      if (typeof handleOCR !== "function") {
+        throw new Error("OCR module is not a function. export mismatch detected.");
+      }
+    }
+
+    // ============================
+    // 🖼 画像処理
+    // ============================
+    if (event.message.type === "image") {
+      console.log("🖼 OCR pipeline start");
+
+      const imageBuffer = await downloadLineImage(event.message.id);
+
+      console.log("isBuffer:", Buffer.isBuffer(imageBuffer));
+
+      if (!Buffer.isBuffer(imageBuffer)) {
+        throw new Error("Downloaded data is not a Buffer");
+      }
+
+      const result = await handleOCR(imageBuffer);
+
+      console.log("📄 OCR RESULT:", result);
+
+      return result;
+    }
+
+    // ============================
+    // 📝 テキスト
     // ============================
     if (event.message.type === "text") {
-      console.log("📝 text message:", event.message.text);
-      return;
+      console.log("📝 text:", event.message.text);
+      return event.message.text;
     }
 
   } catch (err) {
@@ -72,6 +96,6 @@ async function dispatcher(event) {
 }
 
 // ================================
-// export
+// 📤 export（統一）
 // ================================
 module.exports = { dispatcher };
