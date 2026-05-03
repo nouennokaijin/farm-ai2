@@ -1,112 +1,66 @@
 // services/smartOCR.js
-// 2026/5/3 改良版
-// 「必ず値を返す」「空を作らない」仕様に変更
+// 2026/5/3 完全構想対応版
+// 「格納庫A/B生成」＋「メタ情報完全排除」
 
 const { extractTextFromImage } = require("../utils/ocr");
-const Groq = require("groq-sdk");
-
-const client = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
 
 // ================================
-// 🧹 正規化
+// 🧼 OCR結果の純化（最重要）
 // ================================
-function normalizeText(input) {
-  if (!input) return "";
+function sanitizeOCR(result) {
+  if (!result) return "";
 
-  if (typeof input === "string") return input;
+  // 文字列
+  if (typeof result === "string") return result;
 
-  if (Array.isArray(input)) return input.join("\n");
+  // 配列
+  if (Array.isArray(result)) return result.join("\n");
 
-  if (typeof input === "object") return JSON.stringify(input);
-
-  return String(input);
-}
-
-// ================================
-// OCR実行
-// ================================
-async function runOCR(imageUrl) {
-  try {
-    const result = await extractTextFromImage(imageUrl);
-    return normalizeText(result);
-  } catch (e) {
-    console.error("OCR error:", e);
+  // オブジェクト → textだけ抜く（ここが核）
+  if (typeof result === "object") {
+    if (typeof result.text === "string") {
+      return result.text;
+    }
     return "";
   }
+
+  return String(result);
 }
 
 // ================================
-// 品質評価
-// ================================
-function estimateQuality(text) {
-  if (!text) return 0;
-  if (text.length < 5) return 0.1;
-  if (text.length < 30) return 0.5;
-  return 1;
-}
-
-// ================================
-// AI補正（安全運転）
-// ================================
-async function refineText(rawText) {
-  const text = normalizeText(rawText).trim();
-  if (!text) return "";
-
-  const quality = estimateQuality(text);
-
-  // 短すぎる場合はそのまま返す
-  if (quality < 0.3) return text;
-
-  try {
-    const res = await client.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      temperature: 0,
-      messages: [
-        {
-          role: "system",
-          content: "OCR誤認識の修正のみ行う。創作禁止。",
-        },
-        { role: "user", content: text },
-      ],
-    });
-
-    return normalizeText(
-      res?.choices?.[0]?.message?.content || text
-    );
-
-  } catch (e) {
-    console.error("AI refine error:", e);
-    return text;
-  }
-}
-
-// ================================
-// メインOCR
+// 🔍 メインOCR
 // ================================
 async function smartOCR(imageUrl) {
   try {
-    const rawText = await runOCR(imageUrl);
-    const quality = estimateQuality(rawText);
-    const refinedText = await refineText(rawText);
+    const raw = await extractTextFromImage(imageUrl);
+
+    // 🔥 完全リセット（メタ情報排除）
+    const cleanText = sanitizeOCR(raw).trim();
 
     // ================================
-    // 📦 絶対に空構造を返さない
+    // 📦 格納庫A/B
     // ================================
     return {
-      rawText: rawText || "",
-      refinedText: refinedText || rawText || "",
-      quality,
+      A: {
+        hasText: !!cleanText,
+        text: cleanText || "文字なし",
+      },
+      B: {
+        description: "画像あり", // ※ここは後でAI Visionに差し替え可
+      },
     };
 
   } catch (e) {
-    console.error("smartOCR fatal error:", e);
+    console.error("smartOCR error:", e);
 
     return {
-      rawText: "",
-      refinedText: "",
-      quality: 0,
+      A: {
+        hasText: false,
+        text: "文字なし",
+      },
+      B: {
+        description: "解析失敗",
+      },
     };
   }
 }

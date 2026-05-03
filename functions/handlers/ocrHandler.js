@@ -1,6 +1,6 @@
 // handlers/ocrHandler.js
-// 2026/5/3 改良版
-// 格納庫A/B/C/Dを完全実装＋非同期安定化＋構造固定
+// 2026/5/3 完全構想対応版
+// 格納庫A/B → C/D → Notion完全連携
 
 const { buildTags } = require("../utils/tagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
@@ -19,19 +19,19 @@ const client = new Groq({
 // ================================
 // 🤖 AI（格納庫C/D生成）
 // ================================
-async function generateInsight(structured) {
+async function generateAI(structured) {
   try {
     const input = `
-【OCR文字情報】
+【OCR結果】
 ${structured.A.text}
 
-【画像内容】
+【画像】
 ${structured.B.description}
 
 ルール：
 - 推測禁止
-- 書いてあることだけ整理
-- 文字がない場合は「文字なし」と明記
+- 書かれている内容のみ整理
+- 文字がない場合は「文字なし」と書く
     `.trim();
 
     const res = await client.chat.completions.create({
@@ -40,7 +40,7 @@ ${structured.B.description}
       messages: [
         {
           role: "system",
-          content: "あなたは情報整理AIです。要約と構造化のみ行う。",
+          content: "要約と整理のみを行うAI",
         },
         { role: "user", content: input },
       ],
@@ -50,19 +50,19 @@ ${structured.B.description}
       res?.choices?.[0]?.message?.content?.trim() || "解析失敗";
 
     // ================================
-    // 📦 格納庫C/D（固定構造）
+    // 📦 格納庫C/D
     // ================================
     return {
       C: {
         summary: structured.A.hasText ? output : "文字なし",
       },
       D: {
-        summary: structured.B.description || "画像説明なし",
+        summary: structured.B.description,
       },
     };
 
   } catch (e) {
-    console.error("AI insight error:", e);
+    console.error("AI error:", e);
 
     return {
       C: { summary: "AIエラー" },
@@ -72,7 +72,7 @@ ${structured.B.description}
 }
 
 // ================================
-// 📖 OCRハンドラー本体
+// 📖 メイン処理
 // ================================
 async function handleOCR({
   text = "",
@@ -83,7 +83,7 @@ async function handleOCR({
     console.log("🚀 OCR HANDLER START");
 
     // ================================
-    // 📤 画像取得＆アップロード
+    // 📤 画像取得→Cloudinary
     // ================================
     const fileUrls = await Promise.all(
       [...imageIds, ...fileIds].map(async (id) => {
@@ -98,47 +98,32 @@ async function handleOCR({
       })
     ).then((res) => res.filter(Boolean));
 
-    console.log("📦 fileUrls:", fileUrls);
-
     // ================================
-    // 🔍 OCR処理
+    // 🔍 OCR（格納庫A/B生成）
     // ================================
-    let rawText = "";
-    let refinedText = "";
+    let A = { hasText: false, text: "文字なし" };
+    let B = { description: "画像なし" };
 
     for (const url of fileUrls) {
       const result = await smartOCR(url);
 
-      rawText += result.rawText + "\n";
-      refinedText += result.refinedText + "\n";
+      // 複数画像対応（上書き or 結合）
+      A.text += "\n" + result.A.text;
+      A.hasText = A.hasText || result.A.hasText;
+
+      B.description = result.B.description;
     }
 
-    const cleanedText =
-      rawText.trim() || refinedText.trim() || text.trim();
+    const structured = { A, B };
+
+    console.log("📦 A/B:", structured);
 
     // ================================
-    // 📦 格納庫A/B（ここが超重要）
+    // 🤖 AI（C/D生成）
     // ================================
-    const structured = {
-      A: {
-        hasText: !!cleanedText,
-        text: cleanedText || "文字なし",
-      },
-      B: {
-        description: fileUrls.length
-          ? "画像あり（詳細はAI解析へ）"
-          : "画像なし",
-      },
-    };
+    const ai = await generateAI(structured);
 
-    console.log("📦 STRUCTURED OCR:", structured);
-
-    // ================================
-    // 🤖 AI解析（C/D生成）
-    // ================================
-    const aiResult = await generateInsight(structured);
-
-    console.log("🧠 AI RESULT:", aiResult);
+    console.log("🧠 C/D:", ai);
 
     // ================================
     // 🏷 タグ
@@ -149,13 +134,13 @@ async function handleOCR({
     });
 
     // ================================
-    // 🧾 Notion用整形
+    // 🧾 Notion用
     // ================================
     const OCRprop = `${structured.A.text}\n${structured.B.description}`;
-    const AIprop = `${aiResult.C.summary}\n${aiResult.D.summary}`;
+    const AIprop = `${ai.C.summary}\n${ai.D.summary}`;
 
     // ================================
-    // 📤 Notion保存（awaitに変更 ← 超重要）
+    // 📤 保存（await必須）
     // ================================
     await saveMsgToNotion({
       title: "OCR解析",
@@ -170,7 +155,7 @@ async function handleOCR({
       type: "OCR",
     });
 
-    console.log("✅ NOTION SAVE DONE");
+    console.log("✅ DONE");
 
   } catch (e) {
     console.error("OCR handler error:", e);
