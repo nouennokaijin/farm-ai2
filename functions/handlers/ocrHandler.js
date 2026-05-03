@@ -1,242 +1,135 @@
 // handlers/ocrHandler.js
-// 2026/5/3 ハイブリッドOCR完成版
-// Tesseract（第一）→ AI OCR（フォールバック）→ AI整形（最終）
-// 「純OCR」「混入禁止」「安定性重視」
+// 2026/05/03
+// 🧪 OCRフルパイプライン（単一ファイル版）
+// 「とりあえず動かす」ことに全振り
 
-const { buildTags } = require("../utils/tagger");
-const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
-const { downloadLineMedia } = require("../utils/downloadLineMedia");
-
+const sharp = require("sharp");
 const Tesseract = require("tesseract.js");
 const Groq = require("groq-sdk");
 
+// ================================
+// 🔐 環境変数
+// ================================
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+// Notionは既存関数を使う前提（なければconsoleでOK）
+let saveMsgToNotion;
+try {
+  saveMsgToNotion = require("../utils/saveMsgToNotion").saveMsgToNotion;
+} catch (e) {
+  console.log("⚠️ Notion未接続 → console出力モード");
+}
+
+// ================================
+// 🤖 AIクライアント
+// ================================
 const client = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
+  apiKey: GROQ_API_KEY,
 });
 
-
 // ================================
-// 🧠 ① Tesseract OCR（第一段階）
+// 📩 メイン関数
 // ================================
-async function tesseractOCR(buffer) {
+/**
+ * 画像 → OCR → AI補正 → 保存
+ * @param {Buffer} imageBuffer
+ */
+async function ocrHandler(imageBuffer) {
   try {
-    console.log("🔍 Tesseract OCR start");
+    console.log("🚀 OCR Handler START");
 
-    const { data } = await Tesseract.recognize(buffer, "jpn", {
-      logger: (m) => console.log("Tesseract:", m.status),
+    // ============================
+    // ① 画像前処理（ここ超重要）
+    // ============================
+    console.log("🧼 前処理中...");
+    const preprocessed = await sharp(imageBuffer)
+      .grayscale()         // 色を削って文字強調
+      .normalize()         // コントラスト強化
+      .resize({ width: 1500 }) // 解像度UP
+      .sharpen()           // エッジ強化
+      .toBuffer();
+
+    // ============================
+    // ② OCR（雑でもOK）
+    // ============================
+    console.log("🔍 OCR中...");
+    const ocrResult = await Tesseract.recognize(preprocessed, "jpn", {
+      logger: m => console.log("OCR:", m.status),
     });
 
-    const text = (data?.text || "").trim();
+    const rawText = ocrResult.data.text;
+    console.log("📄 OCR結果（raw）:\n", rawText);
 
-    console.log("✅ Tesseract RESULT:");
-    console.log(text);
+    // ============================
+    // ③ AIで文章復元（ここが本体）
+    // ============================
+    console.log("🧠 AI補正中...");
+    let fixedText = rawText;
 
-    return text;
+    try {
+      const prompt = `
+以下はOCRで抽出された日本語テキストですが、誤認識や崩れが多く含まれています。
+自然で読みやすい日本語の文章に修正してください。
 
-  } catch (err) {
-    console.error("❌ Tesseract error:", err);
-    return "";
-  }
-}
+条件：
+- 原文の意味をできるだけ維持
+- 哲学書っぽい文章ならその文体を保つ
+- 推測しすぎない（不明な部分はそのままでもOK）
 
+--- OCR結果 ---
+${rawText}
+----------------
+`;
 
-// ================================
-// 🤖 ② AI OCR（フォールバック）
-// ================================
-async function aiOCR(buffer) {
-  try {
-    console.log("🧠 AI OCR fallback start");
+      const aiRes = await client.chat.completions.create({
+        model: "llama-3.1-70b-versatile",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
+      });
 
-    // ⚠️ bufferをbase64に変換（Vision用）
-    const base64 = buffer.toString("base64");
+      fixedText = aiRes.choices[0].message.content.trim();
 
-    const res = await client.chat.completions.create({
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
-      temperature: 0,
-
-      messages: [
-        {
-          role: "system",
-          content: `
-あなたはOCRエンジンです。
-画像内の文字をそのまま出力してください。
-
-絶対ルール：
-- 補完禁止
-- 解釈禁止
-- 要約禁止
-- 説明禁止
-- 出力はテキストのみ
-          `.trim(),
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "image_base64",
-              image_base64: base64,
-            },
-          ],
-        },
-      ],
-    });
-
-    const text = res?.choices?.[0]?.message?.content?.trim() || "";
-
-    console.log("✅ AI OCR RESULT:");
-    console.log(text);
-
-    return text;
-
-  } catch (err) {
-    console.error("❌ AI OCR error:", err);
-    return "";
-  }
-}
-
-
-// ================================
-// 🧹 ③ テキスト整形（AI）
-// ================================
-async function refineText(rawText) {
-  try {
-    if (!rawText) return "";
-
-    console.log("🧹 refine start");
-
-    const res = await client.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      temperature: 0,
-
-      messages: [
-        {
-          role: "system",
-          content: `
-あなたはテキスト整形ツールです。
-
-ルール：
-- 内容を変更しない
-- 新しい文章を作らない
-- 要約しない
-- 改行だけ整理する
-          `.trim(),
-        },
-        {
-          role: "user",
-          content: rawText,
-        },
-      ],
-    });
-
-    const text = res?.choices?.[0]?.message?.content?.trim() || rawText;
-
-    console.log("✅ refine done");
-
-    return text;
-
-  } catch (e) {
-    console.error("❌ refine error:", e);
-    return rawText; // 失敗しても元を返す
-  }
-}
-
-
-// ================================
-// 📖 メインOCR処理
-// ================================
-async function handleOCR({
-  text = "",
-  imageIds = [],
-}) {
-  try {
-    console.log("🚀 OCR HANDLER START");
-
-    // ================================
-    // 📥 画像取得（ここでbuffer取得）
-    // ================================
-    const buffers = await Promise.all(
-      imageIds.map(async (id) => {
-        const buffer = await downloadLineMedia(id);
-        return buffer || null;
-      })
-    );
-
-    const validBuffers = buffers.filter(Boolean);
-
-    console.log("📸 buffers:", validBuffers.length);
-
-    // ================================
-    // 🔍 OCR実行（ハイブリッド）
-    // ================================
-    let ocrText = "";
-
-    for (const buffer of validBuffers) {
-
-      // ① Tesseract
-      let result = await tesseractOCR(buffer);
-
-      // ② ダメならAI OCR
-      if (!result || result.length < 5) {
-        console.log("⚠️ fallback to AI OCR");
-        result = await aiOCR(buffer);
-      }
-
-      if (result) {
-        ocrText += (ocrText ? "\n" : "") + result;
-      }
+    } catch (aiErr) {
+      console.error("⚠️ AI補正失敗 → raw使用", aiErr);
     }
 
-    ocrText = ocrText.trim();
+    console.log("📝 AI補正結果:\n", fixedText);
 
-    // ================================
-    // 📦 A（純OCR）
-    // ================================
-    const A = {
-      hasText: !!ocrText,
-      text: ocrText || "文字なし",
+    // ============================
+    // ④ 保存（Notion or fallback）
+    // ============================
+    if (saveMsgToNotion) {
+      console.log("💾 Notion保存中...");
+      await saveMsgToNotion({
+        userText: fixedText,
+        rawOCR: rawText,
+        type: "ocr",
+      });
+    } else {
+      console.log("📦 保存スキップ（Notion未設定）");
+    }
+
+    // ============================
+    // 🎉 完了
+    // ============================
+    console.log("✅ OCR Handler DONE");
+
+    return {
+      success: true,
+      rawText,
+      fixedText,
     };
 
-    console.log("📦 OCR TEXT:");
-    console.log(A.text);
-
-    // ================================
-    // 🧹 整形（必要な場合のみ）
-    // ================================
-    let finalText = A.text;
-
-    if (A.hasText) {
-      finalText = await refineText(A.text);
-    }
-
-    // ================================
-    // 🏷 タグ
-    // ================================
-    const tags = await buildTags({
-      text: finalText,
-      type: "OCR",
-    });
-
-    // ================================
-    // 📝 Notion保存
-    // ================================
-    await saveMsgToNotion({
-      title: "OCR解析",
-      userText: text,
-
-      // ✅ 完全に分離
-      ocrText: A.text,     // 生OCR
-      aiText: finalText,   // 整形後
-
-      files: [],
-      tags,
-      type: "OCR",
-    });
-
-    console.log("✅ DONE");
-
-  } catch (e) {
-    console.error("❌ OCR handler error:", e);
+  } catch (err) {
+    console.error("❌ OCR Handler ERROR:", err);
+    return {
+      success: false,
+      error: err.message,
+    };
   }
 }
 
-module.exports = { handleOCR };
+// ================================
+// export
+// ================================
+module.exports = { ocrHandler };
