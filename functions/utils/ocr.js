@@ -1,5 +1,5 @@
 // utils/ocr.js
-// 2026/5/2
+// 2026/5/3 改良版（最小・純OCR特化）
 // Okiura Kazuo
 
 const Groq = require("groq-sdk");
@@ -9,46 +9,43 @@ const client = new Groq({
 });
 
 // =====================================
-// 🧠 OCR（Visionエンジン）
+// 🧠 OCR（Visionベース・純テキスト返却）
 // =====================================
 async function extractTextFromImage(imageUrl) {
+  // ================================
+  // 🚨 入力チェック
+  // ================================
+  if (!imageUrl || typeof imageUrl !== "string") {
+    console.error("❌ OCR input invalid:", imageUrl);
+    return "";
+  }
+
+  console.log("🔍 OCR REQUEST:", imageUrl);
+
   try {
-
     // ================================
-    // 🚨 入力チェック（重要）
-    // ================================
-    if (!imageUrl || typeof imageUrl !== "string") {
-      console.error("❌ OCR input invalid:", imageUrl);
-
-      return {
-        text: "",
-        success: false,
-        reason: "invalid_imageUrl",
-      };
-    }
-
-    console.log("🔍 OCR REQUEST:", imageUrl);
-
-    // ================================
-    // 🤖 Vision OCR
+    // 🤖 Vision OCR（LLM利用）
     // ================================
     const res = await client.chat.completions.create({
+      // ⚠️ モデル注意：
+      // llamaはVision非対応の可能性があるため、
+      // 将来的にはVision対応モデルに差し替え推奨
       model: "meta-llama/llama-4-scout-17b-16e-instruct",
-      temperature: 0,
+
+      temperature: 0, // 🔒 ブレ防止（重要）
 
       messages: [
         {
           role: "system",
           content: `
-あなたは超高精度OCRエンジンです。
+あなたはOCRエンジンです。
+画像に含まれる文字をそのまま出力してください。
 
 ルール：
-- 画像内の文字をそのまま抽出
-- 改行・段落構造を維持
-- 推測は禁止
-- 補完は禁止
-- 意味解釈は禁止
-- 出力は純テキストのみ
+- 文字をそのまま抽出
+- 改行を維持
+- 補完・推測・説明は禁止
+- 出力はテキストのみ
           `.trim(),
         },
         {
@@ -56,7 +53,7 @@ async function extractTextFromImage(imageUrl) {
           content: [
             {
               type: "text",
-              text: "画像内の文字をすべて正確に抽出してください",
+              text: "画像内の文字をすべて抽出してください",
             },
             {
               type: "image_url",
@@ -70,41 +67,46 @@ async function extractTextFromImage(imageUrl) {
     });
 
     // ================================
-    // 🧾 結果取得
+    // 🧾 レスポンス取得
     // ================================
-    const text = res?.choices?.[0]?.message?.content?.trim() || "";
+    let text = res?.choices?.[0]?.message?.content || "";
 
-    if (!text) {
-      console.warn("⚠️ OCR returned empty result");
+    // ================================
+    // 🧹 軽いクリーニング
+    // ================================
+    text = text.trim();
 
-      return {
-        text: "",
-        success: false,
-        reason: "empty_result",
-      };
+    // ❗ LLMが余計な説明を付けた場合の保険
+    // （例：「以下に抽出結果を示します」など）
+    if (text.includes("以下") || text.includes("抽出")) {
+      console.warn("⚠️ OCR noisy output detected");
     }
 
-    console.log("✅ OCR SUCCESS");
+    // ================================
+    // 📊 空チェック
+    // ================================
+    if (!text) {
+      console.warn("⚠️ OCR returned empty result");
+      return "";
+    }
 
-    return {
-      text,
-      success: true,
-      reason: "ok",
-    };
+    console.log("✅ OCR RESULT:");
+    console.log(text);
+
+    // ================================
+    // 🎯 純テキストのみ返却
+    // ================================
+    return text;
 
   } catch (err) {
-
     // ================================
-    // ❌ エラーハンドリング（可視化）
+    // ❌ エラーハンドリング
     // ================================
     console.error("❌ OCR error:", err);
-
-    return {
-      text: "",
-      success: false,
-      reason: "ocr_exception",
-    };
+    return "";
   }
 }
 
-module.exports = { extractTextFromImage };
+module.exports = {
+  extractTextFromImage,
+};
