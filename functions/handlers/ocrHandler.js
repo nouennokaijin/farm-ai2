@@ -1,14 +1,12 @@
 // handlers/ocrHandler.js
-// 2026/5/3 完全構想対応版
-// 格納庫A/B → C/D → Notion完全連携
+// 2026/5/3 統合・簡略化版
+// 「OCR → A/B → AI → Notion」最小構成
 
 const { buildTags } = require("../utils/tagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 
 const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
-
-const { smartOCR } = require("../secretary/smartOCR");
 
 const Groq = require("groq-sdk");
 
@@ -17,21 +15,76 @@ const client = new Groq({
 });
 
 // ================================
-// 🤖 AI（格納庫C/D生成）
+// 🧠 OCR（純テキスト取得）
 // ================================
-async function generateAI(structured) {
+async function extractTextFromImage(imageUrl) {
+  if (!imageUrl || typeof imageUrl !== "string") {
+    console.error("❌ OCR input invalid:", imageUrl);
+    return "";
+  }
+
+  console.log("🔍 OCR REQUEST:", imageUrl);
+
+  try {
+    const res = await client.chat.completions.create({
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      temperature: 0,
+
+      messages: [
+        {
+          role: "system",
+          content: `
+あなたはOCRエンジンです。
+画像内の文字をそのまま出力してください。
+
+ルール：
+- 改行維持
+- 補完禁止
+- 解釈禁止
+- 出力はテキストのみ
+          `.trim(),
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: { url: imageUrl },
+            },
+          ],
+        },
+      ],
+    });
+
+    const text = res?.choices?.[0]?.message?.content?.trim() || "";
+
+    console.log("✅ OCR RESULT:");
+    console.log(text);
+
+    return text;
+
+  } catch (err) {
+    console.error("❌ OCR error:", err);
+    return "";
+  }
+}
+
+// ================================
+// 🤖 AI（要約生成）
+// ================================
+async function generateAI(ocrText, imageDescription) {
   try {
     const input = `
 【OCR結果】
-${structured.A.text}
+${ocrText}
 
 【画像】
-${structured.B.description}
+${imageDescription}
 
 ルール：
 - 推測禁止
 - 書かれている内容のみ整理
-- 文字がない場合は「文字なし」と書く
+- 文字がない場合は「文字なし」
     `.trim();
 
     const res = await client.chat.completions.create({
@@ -46,28 +99,11 @@ ${structured.B.description}
       ],
     });
 
-    const output =
-      res?.choices?.[0]?.message?.content?.trim() || "解析失敗";
-
-    // ================================
-    // 📦 格納庫C/D
-    // ================================
-    return {
-      C: {
-        summary: structured.A.hasText ? output : "文字なし",
-      },
-      D: {
-        summary: structured.B.description,
-      },
-    };
+    return res?.choices?.[0]?.message?.content?.trim() || "解析失敗";
 
   } catch (e) {
-    console.error("AI error:", e);
-
-    return {
-      C: { summary: "AIエラー" },
-      D: { summary: "AIエラー" },
-    };
+    console.error("❌ AI error:", e);
+    return "AIエラー";
   }
 }
 
@@ -83,7 +119,7 @@ async function handleOCR({
     console.log("🚀 OCR HANDLER START");
 
     // ================================
-    // 📤 画像取得→Cloudinary
+    // 📤 画像取得 → Cloudinary
     // ================================
     const fileUrls = await Promise.all(
       [...imageIds, ...fileIds].map(async (id) => {
@@ -98,58 +134,73 @@ async function handleOCR({
       })
     ).then((res) => res.filter(Boolean));
 
+    console.log("📸 Uploaded URLs:", fileUrls);
+
     // ================================
-    // 🔍 OCR（格納庫A/B生成）
+    // 🔍 OCR（複数画像対応）
     // ================================
-    let A = { hasText: false, text: "文字なし" };
-    let B = { description: "画像なし" };
+    let ocrText = "";
 
     for (const url of fileUrls) {
-      const result = await smartOCR(url);
-
-      // 複数画像対応（上書き or 結合）
-      A.text += "\n" + result.A.text;
-      A.hasText = A.hasText || result.A.hasText;
-
-      B.description = result.B.description;
+      const text = await extractTextFromImage(url);
+      ocrText += "\n" + text;
     }
 
-    const structured = { A, B };
-
-    console.log("📦 A/B:", structured);
+    ocrText = ocrText.trim();
 
     // ================================
-    // 🤖 AI（C/D生成）
+    // 📦 A/B（ここで構造化）
     // ================================
-    const ai = await generateAI(structured);
+    const A = {
+      hasText: !!ocrText,
+      text: ocrText || "文字なし",
+    };
 
-    console.log("🧠 C/D:", ai);
+    const B = {
+      description: fileUrls.length ? "画像あり" : "画像なし",
+    };
+
+    console.log("📦 A:", A);
+    console.log("📦 B:", B);
+
+    // ================================
+    // 🤖 AI（C/D）
+    // ================================
+    const aiSummary = await generateAI(A.text, B.description);
+
+    const C = {
+      summary: A.hasText ? aiSummary : "文字なし",
+    };
+
+    const D = {
+      summary: B.description,
+    };
+
+    console.log("🧠 C:", C);
+    console.log("🧠 D:", D);
 
     // ================================
     // 🏷 タグ
     // ================================
     const tags = await buildTags({
-      text: structured.A.text,
+      text: A.text,
       type: "OCR",
     });
 
     // ================================
-    // 🧾 Notion用
+    // 📝 Notion保存用データ
     // ================================
-    const OCRprop = `${structured.A.text}\n${structured.B.description}`;
-    const AIprop = `${ai.C.summary}\n${ai.D.summary}`;
+    const OCRprop = `${A.text}\n${B.description}`;
+    const AIprop = `${C.summary}\n${D.summary}`;
 
     // ================================
-    // 📤 保存（await必須）
+    // 📤 保存
     // ================================
     await saveMsgToNotion({
       title: "OCR解析",
-
       userText: text,
-
       ocrText: OCRprop,
       aiText: AIprop,
-
       files: fileUrls,
       tags,
       type: "OCR",
@@ -158,7 +209,7 @@ async function handleOCR({
     console.log("✅ DONE");
 
   } catch (e) {
-    console.error("OCR handler error:", e);
+    console.error("❌ OCR handler error:", e);
   }
 }
 
