@@ -1,71 +1,77 @@
-// handlers/ocrHandler.js
+// secretary/dispatcher.js
+// 2026/05/03
+// 📡 LINEイベントの司令塔
 
-const sharp = require("sharp");
-const Tesseract = require("tesseract.js");
-const Groq = require("groq-sdk");
+const axios = require("axios");
+const { handleOCR } = require("../handlers/ocrHandler");
 
-// Notion（なくても動くようにする）
-let saveMsgToNotion;
-try {
-  saveMsgToNotion = require("../utils/saveMsgToNotion").saveMsgToNotion;
-} catch (e) {
-  console.log("⚠️ Notion未接続");
+// ================================
+// 📥 LINE画像を取得する関数
+// ================================
+/**
+ * LINEのmessageIdから画像データを取得する
+ * @param {string} messageId
+ * @returns {Buffer}
+ */
+async function downloadLineImage(messageId) {
+  const url = `https://api-data.line.me/v2/bot/message/${messageId}/content`;
+
+  const res = await axios.get(url, {
+    responseType: "arraybuffer", // ← これ重要（バイナリで取る）
+    headers: {
+      Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+    },
+  });
+
+  // 👇 Bufferに変換（これをOCRに渡す）
+  return Buffer.from(res.data);
 }
 
-const client = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
-
-// 👇 これがないと動かない
-async function ocrHandler(imageBuffer) {
+// ================================
+// 🚀 メインdispatcher
+// ================================
+/**
+ * LINEイベントを振り分ける
+ */
+async function dispatcher(event) {
   try {
-    console.log("🧼 preprocess...");
-    const img = await sharp(imageBuffer)
-      .grayscale()
-      .normalize()
-      .resize({ width: 1500 })
-      .sharpen()
-      .toBuffer();
+    console.log("📥 stream event:", event.message.type);
 
-    console.log("🔍 OCR...");
-    const result = await Tesseract.recognize(img, "jpn");
-    const rawText = result.data.text;
+    // ============================
+    // 🖼 画像の場合（ここが今回の本丸）
+    // ============================
+    if (event.message.type === "image") {
+      console.log("🖼 OCR direct pipeline start");
 
-    console.log("🧠 AI補正...");
-    let fixedText = rawText;
+      // ❗ ここが抜けてたポイント
+      // message.id から画像を取得
+      const imageBuffer = await downloadLineImage(event.message.id);
 
-    try {
-      const res = await client.chat.completions.create({
-        model: "llama-3.1-70b-versatile",
-        messages: [
-          {
-            role: "user",
-            content: `OCRの崩れた日本語を自然な文章に直して\n\n${rawText}`,
-          },
-        ],
-        temperature: 0.2,
-      });
+      // 🧪 デバッグ（ちゃんと取れてるか確認）
+      console.log("isBuffer:", Buffer.isBuffer(imageBuffer));
 
-      fixedText = res.choices[0].message.content.trim();
-    } catch (e) {
-      console.log("⚠️ AI失敗 → raw使用");
+      // OCRへ渡す
+      const result = await handleOCR(imageBuffer);
+
+      console.log("OCR RESULT:", result);
+
+      return;
     }
 
-    if (saveMsgToNotion) {
-      await saveMsgToNotion({
-        userText: fixedText,
-        rawOCR: rawText,
-        type: "ocr",
-      });
+    // ============================
+    // 📝 テキスト（仮）
+    // ============================
+    if (event.message.type === "text") {
+      console.log("📝 text message:", event.message.text);
+      return;
     }
-
-    return { success: true, rawText, fixedText };
 
   } catch (err) {
-    console.error("❌ OCR error:", err);
-    return { success: false };
+    console.error("🔥 dispatcher error:", err);
   }
 }
 
-// 👇 dispatcherに合わせる
-module.exports = { handleOCR: ocrHandler };
+// ================================
+// export
+// ================================
+module.exports = { dispatcher };
