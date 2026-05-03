@@ -3,7 +3,7 @@
 // 🌐 LINE webhookサーバー
 
 const express = require("express");
-const dispatcher = require("./secretary/dispatcher"); // ← 関数そのもの
+const { dispatcher } = require("./secretary/dispatcher"); // ← 明示的に分割
 require("dotenv").config();
 
 const app = express();
@@ -25,7 +25,7 @@ app.post("/webhook", async (req, res) => {
     const events = req.body.events;
 
     if (!Array.isArray(events)) {
-      console.log("events is not array");
+      console.log("⚠️ events is not array");
       return res.sendStatus(200);
     }
 
@@ -33,14 +33,17 @@ app.post("/webhook", async (req, res) => {
       console.log("=== EVENT ===");
       console.log(JSON.stringify(event, null, 2));
 
-      // 🚀 dispatcher呼び出し（関数）
-      await dispatcher(event);
+      // 🚀 dispatcher呼び出し
+      const result = await dispatcher(event);
+
+      // 🔍 追跡ログ（デバッグ強化）
+      console.log("📤 dispatcher result:", result);
     }
 
     res.sendStatus(200);
 
   } catch (e) {
-    console.error("WEBHOOK ERROR:", e);
+    console.error("❌ WEBHOOK ERROR:", e);
     res.sendStatus(500);
   }
 });
