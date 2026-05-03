@@ -1,6 +1,6 @@
 // secretary/dispatcher.js
-// 2026/5/2
-// Okiura Kazuo
+// 2026/5/3 OCR単体安定版
+// smartOCR完全排除
 
 const Groq = require("groq-sdk");
 
@@ -16,13 +16,9 @@ const { handleOCR } = require("../handlers/ocrHandler");
 // 🧠 学習ログ
 const { logUnclassified } = require("../utils/chatLogger");
 
-// 🖼 smart OCR（追加）
-const { smartOCR } = require("./smartOCR");
-const { downloadLineMedia } = require("../utils/downloadLineMedia");
+// ❌ smartOCR削除
+// const { smartOCR } = require("./smartOCR");
 
-// ================================
-// AIクライアント
-// ================================
 const client = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
@@ -32,32 +28,6 @@ const client = new Groq({
 // ================================
 const streamBuffer = new Map();
 const STREAM_TTL = 10 * 1000;
-
-// ================================
-// AI分類
-// ================================
-async function classify(text, hasImage = false) {
-  try {
-    const res = await client.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      temperature: 0,
-      messages: [
-        {
-          role: "system",
-          content: hasImage
-            ? "POST / RECEIPT / SCHEDULE / OCR / CHAT のいずれか1語。画像ありはOCR優先。不明はOCRかCHAT。"
-            : "POST / RECEIPT / SCHEDULE / OCR / CHAT のいずれか1語。不明はCHAT。",
-        },
-        { role: "user", content: text || "image_input" },
-      ],
-    });
-
-    return res?.choices?.[0]?.message?.content?.trim() || "CHAT";
-  } catch (e) {
-    console.error("AI classify error:", e);
-    return "CHAT";
-  }
-}
 
 // ================================
 // ストリーム統合
@@ -103,9 +73,6 @@ async function dispatcher(event) {
 
     console.log("📥 stream event:", message.type);
 
-    // ================================
-    // 🧠 画像判定（超重要）
-    // ================================
     const isImage = message.type === "image";
 
     // ================================
@@ -118,44 +85,23 @@ async function dispatcher(event) {
       createdAt: Date.now(),
     };
 
-    // ================================
-    // ストリーム統合
-    // ================================
     const state = mergeStream(userId, incoming);
     const text = (state.text || "").replace(/\s/g, "");
 
     // ================================
-    // 🧠 OCR：最優先ルート（人間視覚処理）
+    // 🧠 OCR最優先（ここを単純化）
     // ================================
     if (isImage || (state.images && state.images.length > 0)) {
-      console.log("🖼 smart OCR pipeline start");
+      console.log("🖼 OCR direct pipeline start");
 
       streamBuffer.delete(userId);
 
-      try {
-        // ① LINE画像取得
-        const buffer = await downloadLineMedia(state.images[0]);
-
-        // ② 前処理 + OCR + AI補正
-        const { rawText, refinedText } = await smartOCR(buffer);
-
-        // ③ OCRハンドラへ
-        return handleOCR({
-          text: refinedText || rawText,
-          rawText,
-          imageIds: state.images,
-          replyToken,
-        });
-
-      } catch (e) {
-        console.error("OCR pipeline error:", e);
-
-        return handleChat({
-          text: "画像の読み取りに失敗しました",
-          replyToken,
-          state,
-        });
-      }
+      // 👉 smartOCRを通さず、そのままhandlerへ
+      return handleOCR({
+        text,                  // ユーザー入力（あれば）
+        imageIds: state.images,
+        replyToken,
+      });
     }
 
     // ================================
@@ -189,56 +135,24 @@ async function dispatcher(event) {
     }
 
     // ================================
-    // 🧠 AI分類
+    // 🧠 fallback（最低限）
     // ================================
-    const intent = await classify(text, isImage);
+    console.log("🧠 fallback → chat");
 
-    switch (intent) {
-      case "POST":
-        streamBuffer.delete(userId);
-        return handlePost({
-          text,
-          imageIds: state.images,
-          replyToken,
-        });
+    await logUnclassified({
+      text,
+      state,
+      reason: "NO_INTENT_MATCH",
+    });
 
-      case "RECEIPT":
-        streamBuffer.delete(userId);
-        return handleReceipt({ text, replyToken });
-
-      case "SCHEDULE":
-        streamBuffer.delete(userId);
-        return handleSchedule({ text, replyToken });
-
-      case "OCR":
-        streamBuffer.delete(userId);
-        return handleOCR({
-          text,
-          imageIds: state.images,
-          replyToken,
-        });
-
-      // ================================
-      // 🧠 学習ルート
-      // ================================
-      default:
-        console.log("🧠 fallback → learning capture");
-
-        await logUnclassified({
-          text,
-          state,
-          reason: "NO_INTENT_MATCH",
-        });
-
-        return handleChat({
-          text,
-          replyToken,
-          state,
-        });
-    }
+    return handleChat({
+      text,
+      replyToken,
+      state,
+    });
 
   } catch (err) {
-    console.error("🔥 stream dispatcher error:", err);
+    console.error("🔥 dispatcher error:", err);
   }
 }
 
