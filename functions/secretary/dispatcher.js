@@ -1,13 +1,30 @@
 // secretary/dispatcher.js
 // 2026/05/03
-// 📡 LINEイベント司令塔（画像 → OCR → AI）
+// 📡 LINEイベントの司令塔（安定版）
 
 const axios = require("axios");
 
 // ================================
-// 🧠 OCR（遅延ロード：循環参照対策）
+// 🧠 OCRは遅延ロード（循環参照対策の最終形）
 // ================================
-let handleOCR;
+let handleOCR = null;
+
+/**
+ * OCRモジュールを安全にロード
+ */
+function getOCR() {
+  if (!handleOCR) {
+    const mod = require("../handlers/ocrHandler");
+
+    // どのexport形式でも吸収する防御設計
+    handleOCR = mod.handleOCR || mod.default;
+
+    if (typeof handleOCR !== "function") {
+      throw new Error("OCR module export is invalid (not a function)");
+    }
+  }
+  return handleOCR;
+}
 
 // ================================
 // 📥 LINE画像取得
@@ -30,37 +47,44 @@ async function downloadLineImage(messageId) {
 // ================================
 async function dispatcher(event) {
   try {
-    console.log("📥 stream event:", event.message.type);
-
-    // ================================
-    // 🧠 OCRロード（初回のみ）
-    // ================================
-    if (!handleOCR) {
-      handleOCR = require("../handlers/ocrHandler").handleOCR;
+    if (!event?.message) {
+      console.warn("⚠️ invalid event");
+      return;
     }
 
-    // ================================
-    // 🖼 画像処理
-    // ================================
-    if (event.message.type === "image") {
+    const type = event.message.type;
+    console.log("📥 stream event:", type);
+
+    // ============================
+    // 🖼 image flow
+    // ============================
+    if (type === "image") {
       console.log("🖼 OCR pipeline start");
 
       const imageBuffer = await downloadLineImage(event.message.id);
 
       console.log("isBuffer:", Buffer.isBuffer(imageBuffer));
 
-      const result = await handleOCR(imageBuffer);
+      if (!Buffer.isBuffer(imageBuffer)) {
+        throw new Error("Invalid image buffer");
+      }
+
+      const ocr = getOCR();
+      const result = await ocr({
+        imageBuffer, // ← 明示的に渡す
+      });
 
       console.log("📄 OCR RESULT:", result);
 
       return result;
     }
 
-    // ================================
-    // 📝 テキスト（将来用）
-    // ================================
-    if (event.message.type === "text") {
+    // ============================
+    // 📝 text flow
+    // ============================
+    if (type === "text") {
       console.log("📝 text:", event.message.text);
+      return event.message.text;
     }
 
   } catch (err) {
@@ -68,5 +92,4 @@ async function dispatcher(event) {
   }
 }
 
-// ⭐ ここが超重要（関数そのままexport）
-module.exports = dispatcher;
+module.exports = { dispatcher };
