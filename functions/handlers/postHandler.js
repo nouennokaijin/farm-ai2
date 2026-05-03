@@ -1,6 +1,6 @@
-// handlers/ocrHandler.js
+// handlers/postHandler.js
 // 2026/5/2
-// Okiura Kazuo
+// 投稿処理（OCR統合・AI生成・画像対応強化版）
 
 const { buildTags } = require("../utils/tagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
@@ -8,8 +8,8 @@ const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
 const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
 
-// 🧠 OCRエンジン（統一：utils配下へ移行）
-const smartOCR = require("../utils/ocr");
+// 🧠 OCRエンジン（統一済み想定）
+const ocr = require("../utils/ocr");
 
 const Groq = require("groq-sdk");
 
@@ -18,9 +18,9 @@ const client = new Groq({
 });
 
 // ================================
-// 🤖 AI（補助：意味解析・要約）
+// 🤖 AI生成（投稿構築）
 // ================================
-async function generateInsight(text) {
+async function generateText(prompt) {
   try {
     const res = await client.chat.completions.create({
       model: "llama-3.3-70b-versatile",
@@ -28,130 +28,126 @@ async function generateInsight(text) {
         {
           role: "system",
           content: `
-あなたはOCR後の意味理解エンジンです。
+あなたはSNS投稿生成AIです。
 
-やること：
-- 内容の要約
-- 意味の整理
-- 重要ポイント抽出
-
-※推測は禁止
-※情報追加禁止
+ルール：
+- OCR情報が含まれる場合、それを最優先で意味解釈する
+- 自然な日本語に変換
+- 事実改変は禁止
+- 読みやすく簡潔にまとめる
           `.trim(),
         },
-        { role: "user", content: text },
+        { role: "user", content: prompt },
       ],
-      temperature: 0.3,
+      temperature: 0.7,
     });
 
-    return res?.choices?.[0]?.message?.content?.trim() || "";
+    return res?.choices?.[0]?.message?.content?.trim() || "（生成失敗）";
   } catch (e) {
-    console.error("Insight generation failed:", e);
-    return "";
+    console.error("AI generation error:", e);
+    return "（AIエラー）";
   }
 }
 
 // ================================
-// 📖 OCRハンドラー本体（改善版）
+// 📸 投稿ハンドラー（OCR統合版）
 // ================================
-async function handleOCR({
+async function handlePost({
   text = "",
+  replyToken,
   imageIds = [],
-  fileIds = [],
 }) {
   try {
-    const allIds = [...imageIds, ...fileIds];
+
+    const safeText = text?.trim() || "";
 
     // ================================
-    // 🚨 入力ガード（無駄処理防止）
+    // 🚨 入力ガード
     // ================================
-    if (!text && allIds.length === 0) {
-      console.log("OCR skipped: no input");
+    if (!safeText && imageIds.length === 0) {
+      console.log("post skipped: empty input");
       return;
     }
 
     // ================================
-    // 📤 LINE画像取得 → Cloudinary
+    // 📤 LINE画像 → Cloudinary
     // ================================
     const fileUrls = await Promise.all(
-      allIds.map(async (id) => {
+      imageIds.map(async (id) => {
         try {
           const buffer = await downloadLineMedia(id);
           if (!buffer) return null;
 
-          return uploadToCloudinary(
+          return await uploadToCloudinary(
             buffer,
-            `ocr_${Date.now()}_${id}`,
-            "book-ocr"
+            `post_${Date.now()}_${id}`,
+            "farm-ai"
           );
         } catch (err) {
-          console.error("Media upload failed:", id, err);
+          console.error("image upload failed:", id, err);
           return null;
         }
       })
     ).then(res => res.filter(Boolean));
 
     // ================================
-    // 🔍 OCR処理（統一エンジン）
+    // 🔍 OCR処理（画像→テキスト化）
     // ================================
-    let rawText = "";
-    let refinedText = "";
+    let ocrText = "";
 
-    for (const url of fileUrls) {
-      try {
-        const result = await smartOCR(url);
-
-        rawText += (result?.rawText || "") + "\n";
-        refinedText += (result?.refinedText || "") + "\n";
-      } catch (err) {
-        console.error("OCR failed for:", url, err);
+    if (fileUrls.length > 0) {
+      for (const url of fileUrls) {
+        try {
+          const result = await ocr(url);
+          ocrText += (result?.refinedText || result?.rawText || "") + "\n";
+        } catch (err) {
+          console.error("OCR failed:", url, err);
+        }
       }
     }
 
-    const cleanedText = (refinedText || rawText).trim();
+    const combinedText = `
+${safeText}
 
-    if (!cleanedText && !text) {
-      console.log("OCR result empty");
-      return;
-    }
-
-    // ================================
-    // 🧠 AI意味解析（補助レイヤー）
-    // ================================
-    const insight = await generateInsight(cleanedText || text);
+${ocrText}
+    `.trim();
 
     // ================================
-    // 🏷 タグ生成（ルールベース）
+    // 🤖 AI投稿生成（統合入力）
+    // ================================
+    const aiText = await generateText(`
+以下の情報をもとに自然なSNS投稿を作成してください。
+
+# 入力情報
+${combinedText}
+`);
+
+    // ================================
+    // 🏷 タグ生成
     // ================================
     const tags = await buildTags({
-      text: cleanedText || text,
-      type: "OCR",
+      text: aiText,
+      type: "投稿",
     });
 
     // ================================
-    // 📦 Notion保存（非同期・非ブロッキング）
+    // 📦 Notion保存
     // ================================
     setImmediate(async () => {
       try {
         await saveMsgToNotion({
-          title: "OCRログ（強化版）",
+          title: "LINE投稿（OCR統合）",
 
-          // 🧠 入力層
-          userText: text,
+          userText: safeText,
 
-          // 🔍 OCR層
-          rawOCR: rawText,
-          ocrText: cleanedText,
+          // 🧠 OCRログも保存
+          ocrText,
 
-          // 🤖 意味層
-          aiInsight: insight,
-
-          // 📎 添付
+          aiText,
           files: fileUrls,
 
-          // 🏷 メタ情報
           tags,
-          type: "OCR",
+          type: "投稿",
         });
       } catch (err) {
         console.error("Notion save failed:", err);
@@ -159,8 +155,8 @@ async function handleOCR({
     });
 
   } catch (e) {
-    console.error("OCR handler error:", e);
+    console.error("post handler error:", e);
   }
 }
 
-module.exports = { handleOCR };
+module.exports = { handlePost }

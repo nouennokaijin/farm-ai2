@@ -1,135 +1,185 @@
 // handlers/ocrHandler.js
-// 2026/5/3 Tesseract版（完全置換）
-// 「純OCR（機械）＋AI整形分離」構造
+// 2026/5/3 ハイブリッドOCR完成版
+// Tesseract（第一）→ AI OCR（フォールバック）→ AI整形（最終）
+// 「純OCR」「混入禁止」「安定性重視」
 
 const { buildTags } = require("../utils/tagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
-
-const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
 
-// 🧠 OCRエンジン（Tesseract）
 const Tesseract = require("tesseract.js");
-
-// 🤖 AI（整形用）
 const Groq = require("groq-sdk");
+
 const client = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
 
 // ================================
-// 🧠 OCR（Tesseract：純機械抽出）
+// 🧠 ① Tesseract OCR（第一段階）
 // ================================
-async function extractTextFromBuffer(buffer) {
+async function tesseractOCR(buffer) {
   try {
-    if (!buffer) {
-      console.error("❌ OCR buffer invalid");
-      return "";
-    }
+    console.log("🔍 Tesseract OCR start");
 
-    console.log("🔍 OCR START (Tesseract)");
+    const { data } = await Tesseract.recognize(buffer, "jpn", {
+      logger: (m) => console.log("Tesseract:", m.status),
+    });
 
-    // ================================
-    // 🧠 OCR実行
-    // ================================
-    const result = await Tesseract.recognize(
-      buffer,
-      "jpn+eng", // 日本語＋英語（安定）
-      {
-        logger: (m) => {
-          // デバッグ用進行ログ（重いなら消してOK）
-          if (m.status === "recognizing text") {
-            console.log("⏳ OCR:", Math.floor(m.progress * 100) + "%");
-          }
-        },
-      }
-    );
+    const text = (data?.text || "").trim();
 
-    const text = result?.data?.text?.trim() || "";
-
-    console.log("✅ OCR RESULT:");
+    console.log("✅ Tesseract RESULT:");
     console.log(text);
 
     return text;
 
   } catch (err) {
-    console.error("❌ OCR error:", err);
+    console.error("❌ Tesseract error:", err);
     return "";
   }
 }
 
 
 // ================================
-// 🤖 AI（整形のみ・創作禁止）
+// 🤖 ② AI OCR（フォールバック）
 // ================================
-async function generateAI(ocrText) {
+async function aiOCR(buffer) {
   try {
-    const input = `
-以下のテキストをそのまま整形してください。
+    console.log("🧠 AI OCR fallback start");
 
-ルール：
-- 内容を変更しない
-- 新しい文章を作らない
-- 要約しない
-- 箇条書きにしない
-- 改行整理のみ行う
-
-テキスト：
-${ocrText}
-    `.trim();
+    // ⚠️ bufferをbase64に変換（Vision用）
+    const base64 = buffer.toString("base64");
 
     const res = await client.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
       temperature: 0,
+
       messages: [
         {
           role: "system",
-          content: "テキスト整形ツール",
+          content: `
+あなたはOCRエンジンです。
+画像内の文字をそのまま出力してください。
+
+絶対ルール：
+- 補完禁止
+- 解釈禁止
+- 要約禁止
+- 説明禁止
+- 出力はテキストのみ
+          `.trim(),
         },
-        { role: "user", content: input },
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_base64",
+              image_base64: base64,
+            },
+          ],
+        },
       ],
     });
 
-    return res?.choices?.[0]?.message?.content?.trim() || "解析失敗";
+    const text = res?.choices?.[0]?.message?.content?.trim() || "";
 
-  } catch (e) {
-    console.error("❌ AI error:", e);
-    return "AIエラー";
+    console.log("✅ AI OCR RESULT:");
+    console.log(text);
+
+    return text;
+
+  } catch (err) {
+    console.error("❌ AI OCR error:", err);
+    return "";
   }
 }
 
 
 // ================================
-// 📖 メイン処理
+// 🧹 ③ テキスト整形（AI）
+// ================================
+async function refineText(rawText) {
+  try {
+    if (!rawText) return "";
+
+    console.log("🧹 refine start");
+
+    const res = await client.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      temperature: 0,
+
+      messages: [
+        {
+          role: "system",
+          content: `
+あなたはテキスト整形ツールです。
+
+ルール：
+- 内容を変更しない
+- 新しい文章を作らない
+- 要約しない
+- 改行だけ整理する
+          `.trim(),
+        },
+        {
+          role: "user",
+          content: rawText,
+        },
+      ],
+    });
+
+    const text = res?.choices?.[0]?.message?.content?.trim() || rawText;
+
+    console.log("✅ refine done");
+
+    return text;
+
+  } catch (e) {
+    console.error("❌ refine error:", e);
+    return rawText; // 失敗しても元を返す
+  }
+}
+
+
+// ================================
+// 📖 メインOCR処理
 // ================================
 async function handleOCR({
   text = "",
   imageIds = [],
-  fileIds = [],
 }) {
   try {
     console.log("🚀 OCR HANDLER START");
 
     // ================================
-    // 📥 画像取得（buffer）
+    // 📥 画像取得（ここでbuffer取得）
     // ================================
     const buffers = await Promise.all(
-      [...imageIds, ...fileIds].map(async (id) => {
+      imageIds.map(async (id) => {
         const buffer = await downloadLineMedia(id);
         return buffer || null;
       })
-    ).then((res) => res.filter(Boolean));
+    );
 
-    console.log("📸 Buffers count:", buffers.length);
+    const validBuffers = buffers.filter(Boolean);
+
+    console.log("📸 buffers:", validBuffers.length);
 
     // ================================
-    // 🔍 OCR（複数画像）
+    // 🔍 OCR実行（ハイブリッド）
     // ================================
     let ocrText = "";
 
-    for (const buffer of buffers) {
-      const result = await extractTextFromBuffer(buffer);
+    for (const buffer of validBuffers) {
+
+      // ① Tesseract
+      let result = await tesseractOCR(buffer);
+
+      // ② ダメならAI OCR
+      if (!result || result.length < 5) {
+        console.log("⚠️ fallback to AI OCR");
+        result = await aiOCR(buffer);
+      }
 
       if (result) {
         ocrText += (ocrText ? "\n" : "") + result;
@@ -139,61 +189,45 @@ async function handleOCR({
     ocrText = ocrText.trim();
 
     // ================================
-    // 📦 A/B構造（内部用）
+    // 📦 A（純OCR）
     // ================================
     const A = {
       hasText: !!ocrText,
       text: ocrText || "文字なし",
     };
 
-    const B = {
-      description: buffers.length ? "画像あり" : "画像なし",
-    };
-
-    console.log("📦 A:", A);
-    console.log("📦 B:", B);
+    console.log("📦 OCR TEXT:");
+    console.log(A.text);
 
     // ================================
-    // 🤖 AI（整形）
+    // 🧹 整形（必要な場合のみ）
     // ================================
-    let C = { summary: "文字なし" };
-    let D = { summary: B.description };
+    let finalText = A.text;
 
     if (A.hasText) {
-      const aiSummary = await generateAI(A.text);
-      C.summary = aiSummary;
+      finalText = await refineText(A.text);
     }
 
-    console.log("🧠 C:", C);
-    console.log("🧠 D:", D);
-
     // ================================
-    // 🏷 タグ生成
+    // 🏷 タグ
     // ================================
     const tags = await buildTags({
-      text: A.text,
+      text: finalText,
       type: "OCR",
     });
 
     // ================================
-    // 📝 Notion保存用
-    // ================================
-    const OCRprop = A.text;   // ←純OCRのみ
-    const AIprop = C.summary; // ←AIは別枠
-
-    // ================================
-    // 📤 保存
+    // 📝 Notion保存
     // ================================
     await saveMsgToNotion({
       title: "OCR解析",
       userText: text,
-      ocrText: OCRprop,
-      aiText: AIprop,
 
-      // 🔥 Cloudinaryは“必要ならだけ”
-      // （今は省略してもOK）
+      // ✅ 完全に分離
+      ocrText: A.text,     // 生OCR
+      aiText: finalText,   // 整形後
+
       files: [],
-
       tags,
       type: "OCR",
     });
