@@ -1,6 +1,6 @@
 // handlers/ocrHandler.js
-// 2026/5/3 統合・簡略化版
-// 「OCR → A/B → AI → Notion」最小構成
+// 2026/5/3 改良版（意図一致版）
+// 「OCRは純テキストのみ」「AIは別枠」「混入禁止」
 
 const { buildTags } = require("../utils/tagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
@@ -14,10 +14,12 @@ const client = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+
 // ================================
 // 🧠 OCR（純テキスト取得）
 // ================================
 async function extractTextFromImage(imageUrl) {
+  // 入力チェック（ここで弾く）
   if (!imageUrl || typeof imageUrl !== "string") {
     console.error("❌ OCR input invalid:", imageUrl);
     return "";
@@ -28,19 +30,20 @@ async function extractTextFromImage(imageUrl) {
   try {
     const res = await client.chat.completions.create({
       model: "meta-llama/llama-4-scout-17b-16e-instruct",
-      temperature: 0,
+      temperature: 0, // ブレ防止
 
       messages: [
         {
           role: "system",
           content: `
 あなたはOCRエンジンです。
-画像内の文字をそのまま出力してください。
+画像内の文字を一切変更せず、そのまま出力してください。
 
-ルール：
-- 改行維持
+絶対ルール：
 - 補完禁止
 - 解釈禁止
+- 要約禁止
+- 説明禁止
 - 出力はテキストのみ
           `.trim(),
         },
@@ -69,31 +72,34 @@ async function extractTextFromImage(imageUrl) {
   }
 }
 
-// ================================
-// 🤖 AI（要約生成）
-// ================================
-async function generateAI(ocrText, imageDescription) {
-  try {
-    const input = `
-【OCR結果】
-${ocrText}
 
-【画像】
-${imageDescription}
+// ================================
+// 🤖 AI（整理のみ・創作禁止）
+// ================================
+async function generateAI(ocrText) {
+  try {
+    // OCR結果だけを入力（画像情報は渡さない）
+    const input = `
+以下のテキストをそのまま整形してください。
 
 ルール：
-- 推測禁止
-- 書かれている内容のみ整理
-- 文字がない場合は「文字なし」
+- 内容を変更しない
+- 新しい文章を作らない
+- 要約しない
+- 箇条書きにしない
+- 改行整理のみ行う
+
+テキスト：
+${ocrText}
     `.trim();
 
     const res = await client.chat.completions.create({
       model: "llama-3.3-70b-versatile",
-      temperature: 0.3,
+      temperature: 0, // ←創作抑制（重要）
       messages: [
         {
           role: "system",
-          content: "要約と整理のみを行うAI",
+          content: "テキスト整形ツール",
         },
         { role: "user", content: input },
       ],
@@ -106,6 +112,7 @@ ${imageDescription}
     return "AIエラー";
   }
 }
+
 
 // ================================
 // 📖 メイン処理
@@ -142,14 +149,16 @@ async function handleOCR({
     let ocrText = "";
 
     for (const url of fileUrls) {
-      const text = await extractTextFromImage(url);
-      ocrText += "\n" + text;
+      const result = await extractTextFromImage(url);
+      if (result) {
+        ocrText += (ocrText ? "\n" : "") + result;
+      }
     }
 
     ocrText = ocrText.trim();
 
     // ================================
-    // 📦 A/B（ここで構造化）
+    // 📦 A/B（内部構造用）
     // ================================
     const A = {
       hasText: !!ocrText,
@@ -166,15 +175,14 @@ async function handleOCR({
     // ================================
     // 🤖 AI（C/D）
     // ================================
-    const aiSummary = await generateAI(A.text, B.description);
+    // ⚠️ OCRが空ならAI回さない
+    let C = { summary: "文字なし" };
+    let D = { summary: B.description };
 
-    const C = {
-      summary: A.hasText ? aiSummary : "文字なし",
-    };
-
-    const D = {
-      summary: B.description,
-    };
+    if (A.hasText) {
+      const aiSummary = await generateAI(A.text);
+      C.summary = aiSummary;
+    }
 
     console.log("🧠 C:", C);
     console.log("🧠 D:", D);
@@ -188,10 +196,14 @@ async function handleOCR({
     });
 
     // ================================
-    // 📝 Notion保存用データ
+    // 📝 Notion保存用データ（ここが重要）
     // ================================
-    const OCRprop = `${A.text}\n${B.description}`;
-    const AIprop = `${C.summary}\n${D.summary}`;
+
+    // ✅ OCRは純テキストのみ（メタ情報排除）
+    const OCRprop = A.text;
+
+    // ✅ AIはAIだけ
+    const AIprop = C.summary;
 
     // ================================
     // 📤 保存
