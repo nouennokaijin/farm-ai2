@@ -1,24 +1,24 @@
 // index.js
-// 2026/4/27
-// okiura kazuo
-
-// index.js
-// 2026/4/25
+// 2026/04/25
+// 🌐 LINE webhookサーバー
 
 const express = require("express");
-const dispatch = require("./secretary/dispatcher");
+const dispatcher = require("./secretary/dispatcher"); // ← 関数そのもの
 require("dotenv").config();
 
 const app = express();
 
-// ===== 必須ミドルウェア（LINE対策）=====
+// ================================
+// 📦 middleware
+// ================================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ===== webhook =====
+// ================================
+// 🔥 webhook入口
+// ================================
 app.post("/webhook", async (req, res) => {
   try {
-    // 🔍 デバッグ①：受信ボディ確認
     console.log("=== RAW BODY ===");
     console.log(JSON.stringify(req.body, null, 2));
 
@@ -30,23 +30,26 @@ app.post("/webhook", async (req, res) => {
     }
 
     for (const event of events) {
-      // 🔍 デバッグ②：イベント単体確認
       console.log("=== EVENT ===");
       console.log(JSON.stringify(event, null, 2));
 
-      await dispatch(event);
+      // 🚀 dispatcher呼び出し（関数）
+      await dispatcher(event);
     }
 
     res.sendStatus(200);
+
   } catch (e) {
     console.error("WEBHOOK ERROR:", e);
     res.sendStatus(500);
   }
 });
 
-// ===== Render対策 =====
+// ================================
+// 🚀 server start
+// ================================
 const PORT = process.env.PORT || 10000;
+
 app.listen(PORT, () => {
   console.log("server running on", PORT);
 });
-
