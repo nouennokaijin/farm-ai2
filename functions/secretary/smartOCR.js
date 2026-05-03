@@ -1,50 +1,36 @@
 // services/smartOCR.js
-// 2026/5/2
-// Okiura Kazuo（安定版：型安全＋OCR品質制御＋AI暴走防止）
+// 2026/5/3 改良版
+// 「必ず値を返す」「空を作らない」仕様に変更
 
 const { extractTextFromImage } = require("../utils/ocr");
 const Groq = require("groq-sdk");
 
-// ================================
-// 🤖 AIクライアント（意味補正用）
-// ================================
 const client = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
 // ================================
-// 🧼 共通：テキスト正規化
+// 🧹 正規化
 // ================================
 function normalizeText(input) {
   if (!input) return "";
 
   if (typeof input === "string") return input;
 
-  if (Array.isArray(input)) {
-    return input.join("\n");
-  }
+  if (Array.isArray(input)) return input.join("\n");
 
-  if (typeof input === "object") {
-    // OCR事故時の保険
-    return JSON.stringify(input);
-  }
+  if (typeof input === "object") return JSON.stringify(input);
 
   return String(input);
 }
 
 // ================================
-// ① OCR実行（URL専用）
+// OCR実行
 // ================================
 async function runOCR(imageUrl) {
   try {
-    if (typeof imageUrl !== "string" || !imageUrl.trim()) {
-      throw new Error("invalid imageUrl");
-    }
-
     const result = await extractTextFromImage(imageUrl);
-
     return normalizeText(result);
-
   } catch (e) {
     console.error("OCR error:", e);
     return "";
@@ -52,66 +38,43 @@ async function runOCR(imageUrl) {
 }
 
 // ================================
-// ② OCR品質スコア（軽量判定）
+// 品質評価
 // ================================
 function estimateQuality(text) {
   if (!text) return 0;
-
-  const length = text.length;
-
-  // 文字が短すぎる＝低品質
-  if (length < 5) return 0.1;
-
-  // それなりに文章っぽい
-  if (length < 30) return 0.5;
-
+  if (text.length < 5) return 0.1;
+  if (text.length < 30) return 0.5;
   return 1;
 }
 
 // ================================
-// ③ AI補正（暴走防止付き）
+// AI補正（安全運転）
 // ================================
 async function refineText(rawText) {
   const text = normalizeText(rawText).trim();
-
   if (!text) return "";
 
-  // ⚠️ 短すぎる場合はAIに投げない（暴走防止）
   const quality = estimateQuality(text);
-  if (quality < 0.3) {
-    return text;
-  }
+
+  // 短すぎる場合はそのまま返す
+  if (quality < 0.3) return text;
 
   try {
     const res = await client.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       temperature: 0,
-
       messages: [
         {
           role: "system",
-          content: `
-あなたはOCR誤認識の修正エンジンです。
-
-ルール：
-- 意味の補完は禁止
-- 事実の追加は禁止
-- 文脈の創作は禁止
-- 文字の整形のみ行う
-- 出力は修正後テキストのみ
-          `.trim(),
+          content: "OCR誤認識の修正のみ行う。創作禁止。",
         },
-        {
-          role: "user",
-          content: text,
-        },
+        { role: "user", content: text },
       ],
     });
 
-    const output =
-      res?.choices?.[0]?.message?.content;
-
-    return normalizeText(output || text);
+    return normalizeText(
+      res?.choices?.[0]?.message?.content || text
+    );
 
   } catch (e) {
     console.error("AI refine error:", e);
@@ -120,43 +83,21 @@ async function refineText(rawText) {
 }
 
 // ================================
-// ④ メインOCRパイプライン
+// メインOCR
 // ================================
 async function smartOCR(imageUrl) {
   try {
-
-    // ================================
-    // Step1: OCR
-    // ================================
     const rawText = await runOCR(imageUrl);
-
-    if (!rawText) {
-      console.warn("⚠️ OCR returned empty text");
-
-      return {
-        rawText: "",
-        refinedText: "",
-        quality: 0,
-      };
-    }
-
-    // ================================
-    // Step2: 品質評価
-    // ================================
     const quality = estimateQuality(rawText);
-
-    // ================================
-    // Step3: AI補正
-    // ================================
     const refinedText = await refineText(rawText);
 
     // ================================
-    // 📦 出力スキーマ統一
+    // 📦 絶対に空構造を返さない
     // ================================
     return {
-      rawText: normalizeText(rawText),
-      refinedText: normalizeText(refinedText),
-      quality, // ← 追加（デバッグ＆将来分類用）
+      rawText: rawText || "",
+      refinedText: refinedText || rawText || "",
+      quality,
     };
 
   } catch (e) {
