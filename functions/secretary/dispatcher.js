@@ -1,22 +1,63 @@
 // secretary/dispatcher.js
 // 2026/05/03
-// 📡 ルール判定レイヤー + OCR待機 + AIフォールバック + コストログ付き
+// 📡 LINEイベントの司令塔（ルーティング中枢）
+//
+// このファイルの役割：
+// ・LINEイベントを受け取る
+// ・text / image を判定する
+// ・必要に応じてOCRを実行する
+// ・60秒の追加入力待機を行う
+// ・ルールベース or AIでルート決定する
+// ・最終的にHandlerへ処理を渡す
 
+// ======================================================
+// 🌐 HTTP通信ライブラリ（LINE画像取得用）
+// ======================================================
 const axios = require("axios");
+
+// ======================================================
+// 🤖 AIルーティング判定関数（フォールバック用）
+// ======================================================
 const { dispatcherAI } = require("./dispatcherAI");
 
 // ======================================================
-// 📊 AI呼び出しログ（コスト監視用）
+// 🧩 各Handlerの読み込み
+// 👉 最終的な処理先（実行部隊）
+// ======================================================
+const chatHandler = require("../handlers/chatHandler");       
+const postHandler = require("../handlers/postHandler");       
+const ocrHandler = require("../handlers/ocrHandler");         
+const receiptHandler = require("../handlers/receiptHandler"); 
+const scheduleHandler = require("../handlers/scheduleHandler");
+
+// ======================================================
+// 🗺 ルーティングテーブル
+// 👉 route文字列 → 実行Handlerへの変換表
+// ======================================================
+const routeMap = {
+  chat: chatHandler,
+  post: postHandler,
+  ocr: ocrHandler,
+  receipt: receiptHandler,
+  schedule: scheduleHandler,
+};
+
+// ======================================================
+// 📊 AI呼び出し回数カウンター（コスト監視）
 // ======================================================
 let aiCallCount = 0;
 
+// ======================================================
+// 📊 AI呼び出しログ
+// ======================================================
 function logAICall(label) {
   aiCallCount++;
   console.log(`📊 AI CALL #${aiCallCount} → ${label}`);
 }
 
 // ======================================================
-// 🧠 OCR遅延ロード
+// 🧠 OCR関数の遅延ロード
+// 👉 循環参照防止 & 初期化遅延
 // ======================================================
 let handleOCR = null;
 
@@ -29,22 +70,37 @@ function getOCR() {
 }
 
 // ======================================================
-// 🧾 超軽量ルール判定レイヤー（無料ゾーン）
+// 🧠 超軽量ルール判定レイヤー（無料ゾーン）
+// 👉 AIを使わず即座にルート判定する部分
 // ======================================================
 function ruleLayer(text = "") {
   const t = text.toLowerCase();
-
-  if (t.includes("投稿")) return "post";
-  if (t.includes("レシート")) return "receipt";
-  if (t.includes("予定")) return "schedule";
-  if (t.includes("画像") || t.includes("写真")) return "ocr";
+/*
+  if (t.includes("投稿") || t.includes("メモ")) return "post";
+  if (t.includes("レシート") || t.includes("領収書")) return "receipt";
+  if (t.includes("予定") || t.includes("スケジュール")) return "schedule";
+  if (t.includes("画像") || t.includes("写真") || t.includes("読み取り")) return "ocr";
   if (t.length > 0) return "chat";
 
   return null;
 }
+*/
+  if (t.includes("投稿") || t.includes("メモ")) {
+  return "post";
+} else if (t.includes("レシート") || t.includes("領収書")) {
+  return "receipt";
+} else if (t.includes("予定") || t.includes("スケジュール")) {
+  return "schedule";
+} else if (t.includes("ocr") || t.includes("おｃｒ") || t.includes("読み取り")) {
+  return "ocr";
+} else {
+  return null;
+}
+
 
 // ======================================================
-// 📥 LINE画像取得
+// 📥 LINE画像ダウンロード
+// 👉 messageIdから画像バイナリ取得
 // ======================================================
 async function downloadLineImage(messageId) {
   const url = `https://api-data.line.me/v2/bot/message/${messageId}/content`;
@@ -61,13 +117,15 @@ async function downloadLineImage(messageId) {
 }
 
 // ======================================================
-// ⏳ OCR待機（最大60秒）
+// ⏳ 60秒テキスト待機（追加入力監視）
 // ======================================================
 function waitForText(event, timeoutMs = 60000) {
   return new Promise((resolve) => {
+
     const start = Date.now();
 
     const interval = setInterval(() => {
+
       const text = event?.message?.text;
 
       if (text) {
@@ -79,14 +137,38 @@ function waitForText(event, timeoutMs = 60000) {
         clearInterval(interval);
         resolve(null);
       }
+
     }, 1000);
   });
 }
 
 // ======================================================
-// 🚀 dispatcher本体
+// 🚚 Handlerへ転送（ルーティング実行）
+// ======================================================
+async function dispatchToHandler(result, event) {
+
+  if (!result?.route) return null;
+
+  const handler = routeMap[result.route];
+
+  if (!handler) {
+    console.warn("⚠️ Unknown route:", result.route);
+    return null;
+  }
+
+  console.log(`🚚 HANDOFF → ${result.route}`);
+
+  return await handler({
+    event,
+    data: result.data,
+  });
+}
+
+// ======================================================
+// 🚀 dispatcher本体（司令塔）
 // ======================================================
 async function dispatcher(event) {
+
   try {
 
     if (!event?.message) return null;
@@ -96,7 +178,7 @@ async function dispatcher(event) {
     console.log("📥 EVENT TYPE:", type);
 
     // ==================================================
-    // 🖼 IMAGE FLOW
+    // 🖼 IMAGE FLOW（画像処理ルート）
     // ==================================================
     if (type === "image") {
 
@@ -114,18 +196,18 @@ async function dispatcher(event) {
 
       console.log("📄 OCR RESULT:", ocrResult);
 
-      // 👉 OCR後にルール判定
-      const rule = ruleLayer(ocrResult);
+      let route = ruleLayer(ocrResult);
 
-      if (rule) {
-        console.log("⚡ RULE MATCH:", rule);
-        return { route: rule, data: ocrResult };
+      if (route) {
+        console.log("⚡ RULE MATCH (OCR):", route);
+
+        return await dispatchToHandler(
+          { route, data: ocrResult },
+          event
+        );
       }
 
-      // ==================================================
-      // ⏳ テキスト待機（最大60秒）
-      // ==================================================
-      console.log("⏳ waiting for text...");
+      console.log("⏳ waiting for follow-up text...");
 
       const waitedText = await waitForText(event);
 
@@ -134,24 +216,29 @@ async function dispatcher(event) {
 
         const r = ruleLayer(waitedText);
 
-        if (r) return { route: r, data: waitedText };
+        if (r) {
+          return await dispatchToHandler(
+            { route: r, data: waitedText },
+            event
+          );
+        }
       }
 
-      // ==================================================
-      // 🤖 AIフォールバック
-      // ==================================================
       logAICall("image fallback");
 
-      const route = await dispatcherAI({
+      const routeAI = await dispatcherAI({
         text: waitedText || "",
         ocr: ocrResult,
       });
 
-      return { route, data: ocrResult };
+      return await dispatchToHandler(
+        { route: routeAI, data: ocrResult },
+        event
+      );
     }
 
     // ==================================================
-    // 📝 TEXT FLOW
+    // 📝 TEXT FLOW（テキスト処理ルート）
     // ==================================================
     if (type === "text") {
 
@@ -159,23 +246,28 @@ async function dispatcher(event) {
 
       console.log("📝 TEXT:", text);
 
-      // ① ルール判定（無料）
-      const rule = ruleLayer(text);
+      const route = ruleLayer(text);
 
-      if (rule) {
-        console.log("⚡ RULE MATCH:", rule);
-        return { route: rule, data: text };
+      if (route) {
+        console.log("⚡ RULE MATCH:", route);
+
+        return await dispatchToHandler(
+          { route, data: text },
+          event
+        );
       }
 
-      // ② AIフォールバック
       logAICall("text fallback");
 
-      const route = await dispatcherAI({
+      const routeAI = await dispatcherAI({
         text,
-        ocr: ""
+        ocr: "",
       });
 
-      return { route, data: text };
+      return await dispatchToHandler(
+        { route: routeAI, data: text },
+        event
+      );
     }
 
     return null;
@@ -186,4 +278,7 @@ async function dispatcher(event) {
   }
 }
 
+// ======================================================
+// 📦 外部公開
+// ======================================================
 module.exports = { dispatcher };
