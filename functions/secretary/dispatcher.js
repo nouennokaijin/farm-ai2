@@ -1,6 +1,16 @@
 // secretary/dispatcher.js
 // 2026/05/03
 // 📡 LINEイベントの司令塔（ルーティング中枢）
+//
+// 🎯 役割整理
+// - 入力解析（text / image）
+// - OCR実行（必要時のみ）
+// - ルート決定（rule / AI）
+// - handlerへ“統一フォーマット”で渡す
+//
+// 🚨 原則
+// - handlerには「同じ形のデータ」を渡す
+// - handler側で入力差分を吸収しない（重要）
 
 const axios = require("axios");
 const { dispatcherAI } = require("./dispatcherAI");
@@ -36,41 +46,6 @@ function logAICall(label) {
 }
 
 // ======================================================
-// 🧠 OCR遅延ロード（修正版：関数直呼び防止）
-// ======================================================
-let handleOCR = null;
-
-function getOCR() {
-  if (!handleOCR) {
-    const mod = require("../handlers/ocrHandler");
-    handleOCR = mod.handleOCR;
-  }
-  return handleOCR;
-}
-
-// ======================================================
-// 🧠 ルール判定（軽量分岐）
-// ======================================================
-function ruleLayer(text = "") {
-  const t = (text || "").toLowerCase();
-
-  if (t.includes("投稿") || t.includes("メモ")) return "post";
-  if (t.includes("レシート") || t.includes("領収書")) return "receipt";
-  if (t.includes("予定") || t.includes("スケジュール")) return "schedule";
-
-  // OCRトリガー（日本語ゆれ対応）
-  if (
-    t.includes("ocr") ||
-    t.includes("おｃｒ") ||
-    t.includes("読み取り") ||
-    t.includes("画像") ||
-    t.includes("写真")
-  ) return "ocr";
-
-  return null;
-}
-
-// ======================================================
 // 📥 LINE画像取得
 // ======================================================
 async function downloadLineImage(messageId) {
@@ -88,7 +63,7 @@ async function downloadLineImage(messageId) {
 }
 
 // ======================================================
-// ⏳ テキスト待機
+// ⏳ 追加入力待機
 // ======================================================
 function waitForText(event, timeoutMs = 60000) {
   return new Promise((resolve) => {
@@ -111,23 +86,45 @@ function waitForText(event, timeoutMs = 60000) {
 }
 
 // ======================================================
-// 🚚 Handler実行
+// 🧠 軽量ルール判定（事業部）
 // ======================================================
-async function dispatchToHandler(result, event) {
-  if (!result?.route) return null;
+function ruleLayer(text = "") {
+  const t = (text || "").toLowerCase();
 
-  const handler = routeMap[result.route];
+  if (t.includes("投稿") || t.includes("メモ")) return "post";
+  if (t.includes("レシート") || t.includes("領収書")) return "receipt";
+  if (t.includes("予定") || t.includes("スケジュール")) return "schedule";
+
+  if (
+    t.includes("ocr") ||
+    t.includes("おｃｒ") ||
+    t.includes("読み取り") ||
+    t.includes("画像") ||
+    t.includes("写真")
+  ) return "ocr";
+
+  return null;
+}
+
+// ======================================================
+// 🚚 Handler実行（統一インターフェース）
+// ======================================================
+async function dispatchToHandler({ route, text, imageBuffer, event }) {
+  const handler = routeMap[route];
 
   if (typeof handler !== "function") {
-    console.warn("⚠️ Handler not found or invalid:", result.route);
+    console.warn("⚠️ Handler not found:", route);
     return null;
   }
 
-  console.log(`🚚 HANDOFF → ${result.route}`);
+  console.log(`🚚 HANDOFF → ${route}`);
 
+  // 👉 全handler共通フォーマット
   return await handler({
+    route,
+    text,
+    imageBuffer,
     event,
-    data: result.data,
   });
 }
 
@@ -150,23 +147,26 @@ async function dispatcher(event) {
 
       const imageBuffer = await downloadLineImage(event.message.id);
 
-      const ocr = getOCR();
+      const ocr = require("../handlers/ocrHandler").handleOCR;
 
       const ocrResult = await ocr({
         imageBuffer,
-        userId: event.source?.userId,
-        messageId: event.message.id,
+        event,
       });
 
-      const text = ocrResult?.text || ocrResult || "";
+      const text = ocrResult?.text || "";
 
       console.log("📄 OCR RESULT:", text);
 
       let route = ruleLayer(text);
 
       if (route) {
-        console.log("⚡ RULE MATCH (OCR):", route);
-        return await dispatchToHandler({ route, data: text }, event);
+        return await dispatchToHandler({
+          route,
+          text,
+          imageBuffer,
+          event,
+        });
       }
 
       console.log("⏳ waiting for follow-up text...");
@@ -174,12 +174,15 @@ async function dispatcher(event) {
       const waitedText = await waitForText(event);
 
       if (waitedText) {
-        console.log("📝 TEXT RECEIVED:", waitedText);
-
         const r = ruleLayer(waitedText);
 
         if (r) {
-          return await dispatchToHandler({ route: r, data: waitedText }, event);
+          return await dispatchToHandler({
+            route: r,
+            text: waitedText,
+            imageBuffer,
+            event,
+          });
         }
       }
 
@@ -190,7 +193,12 @@ async function dispatcher(event) {
         ocr: text,
       });
 
-      return await dispatchToHandler({ route: routeAI, data: text }, event);
+      return await dispatchToHandler({
+        route: routeAI,
+        text: text,
+        imageBuffer,
+        event,
+      });
     }
 
     // ==================================================
@@ -204,8 +212,11 @@ async function dispatcher(event) {
       const route = ruleLayer(text);
 
       if (route) {
-        console.log("⚡ RULE MATCH:", route);
-        return await dispatchToHandler({ route, data: text }, event);
+        return await dispatchToHandler({
+          route,
+          text,
+          event,
+        });
       }
 
       logAICall("text fallback");
@@ -215,7 +226,11 @@ async function dispatcher(event) {
         ocr: "",
       });
 
-      return await dispatchToHandler({ route: routeAI, data: text }, event);
+      return await dispatchToHandler({
+        route: routeAI,
+        text,
+        event,
+      });
     }
 
     return null;

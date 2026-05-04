@@ -1,6 +1,15 @@
 // handlers/ocrHandler.js
 // 2026/5/2
-// 📖 OCRハンドラー（A/B分離設計）
+// 📖 OCRハンドラー（完全入力統一版）
+//
+// 🎯 役割
+// - 画像 → OCR抽出
+// - AI要約生成
+// - Notion保存
+//
+// 🚨 重要
+// - dispatcherから渡される形式に完全依存しない
+// - 入力はすべて統一オブジェクトで受ける
 
 const { buildTags } = require("../utils/tagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
@@ -15,7 +24,7 @@ const client = new Groq({
 });
 
 // ======================================================
-// 🧠 AI要約生成
+// 🧠 AI要約
 // ======================================================
 async function generateInsight(text) {
   try {
@@ -27,7 +36,7 @@ async function generateInsight(text) {
       messages: [
         {
           role: "system",
-          content: "OCR内容の要約・構造化・重要抽出のみ（推測禁止）",
+          content: "OCR内容の要約・構造化（推測禁止）",
         },
         { role: "user", content: text },
       ],
@@ -41,51 +50,27 @@ async function generateInsight(text) {
 }
 
 // ======================================================
-// 📖 OCR handler本体
+// 📖 OCR handler本体（統一入力）
 // ======================================================
-async function handleOCR({ text = "", imageIds = [], fileIds = [] }) {
+async function handleOCR({ text = "", imageBuffer, event }) {
   try {
-    const allIds = [...imageIds, ...fileIds];
 
-    if (!text && allIds.length === 0) {
+    // ==================================================
+    // 🚨 入力チェック
+    // ==================================================
+    if (!imageBuffer && !text) {
       return { ok: false, reason: "no_input" };
     }
 
     // ==================================================
-    // 📤 upload
-    // ==================================================
-    const fileUrls = (
-      await Promise.all(
-        allIds.map(async (id) => {
-          try {
-            const buffer = await downloadLineMedia(id);
-            if (!buffer) return null;
-
-            const url = await uploadToCloudinary(
-              buffer,
-              `ocr_${Date.now()}_${id}`,
-              "book-ocr"
-            );
-
-            return { id, url };
-          } catch (err) {
-            console.error("upload error:", err);
-            return null;
-          }
-        })
-      )
-    ).filter(Boolean);
-
-    // ==================================================
-    // 🔍 OCR
+    // 🔍 OCR実行
     // ==================================================
     let ocrText = "";
 
-    for (const file of fileUrls) {
+    if (imageBuffer) {
       try {
-        const result = await smartOCR(file.url);
-        const t = result?.rawText || "";
-        ocrText += `\n[${file.id}]\n${t}`;
+        const result = await smartOCR(imageBuffer);
+        ocrText = result?.rawText || "";
       } catch (e) {
         console.error("OCR error:", e);
       }
@@ -98,12 +83,12 @@ async function handleOCR({ text = "", imageIds = [], fileIds = [] }) {
     }
 
     // ==================================================
-    // 🧠 AI
+    // 🧠 AI要約
     // ==================================================
     const insight = await generateInsight(ocrText);
 
     // ==================================================
-    // 🏷 tags
+    // 🏷 タグ
     // ==================================================
     const tags = await buildTags({
       text: ocrText,
@@ -119,12 +104,14 @@ async function handleOCR({ text = "", imageIds = [], fileIds = [] }) {
         userText: text,
         ocrText,
         aiInsight: insight,
-        files: fileUrls.map(f => f.url),
         tags,
         type: "OCR",
       }).catch(console.error);
     });
 
+    // ==================================================
+    // 📤 戻り値
+    // ==================================================
     return {
       ok: true,
       text: ocrText,
