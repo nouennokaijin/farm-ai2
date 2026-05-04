@@ -1,106 +1,56 @@
 // utils/ocr.js
-// 2026/5/2
-// Okiura Kazuo
+// 2026/05/04
+// 🧿 OCRユーティリティ（tesseract.js）
+// ・画像URL / Buffer / ローカルパスを受け取る
+// ・テキスト抽出のみを行う（副作用なし）
+// ・失敗時は空文字を返す
 
-const Groq = require("groq-sdk");
+const { createWorker } = require("tesseract.js");
 
-const client = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+// ================================
+// 🧠 OCR実行関数
+// ================================
+async function runOCR(input) {
+  let worker;
 
-// =====================================
-// 🧠 OCR（Visionエンジン）
-// =====================================
-async function extractTextFromImage(imageUrl) {
   try {
+    // ================================
+    // ① Worker生成（日本語＋英語）
+    // ================================
+    worker = await createWorker("jpn+eng");
 
     // ================================
-    // 🚨 入力チェック（重要）
+    // ② OCR実行
     // ================================
-    if (!imageUrl || typeof imageUrl !== "string") {
-      console.error("❌ OCR input invalid:", imageUrl);
-
-      return {
-        text: "",
-        success: false,
-        reason: "invalid_imageUrl",
-      };
-    }
-
-    console.log("🔍 OCR REQUEST:", imageUrl);
+    const { data } = await worker.recognize(input);
 
     // ================================
-    // 🤖 Vision OCR
+    // ③ テキスト整形
     // ================================
-    const res = await client.chat.completions.create({
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
-      temperature: 0,
+    const text = (data?.text || "")
+      .replace(/\s+/g, " ") // 改行・連続スペースを圧縮
+      .trim();
 
-      messages: [
-        {
-          role: "system",
-          content: `
-あなたは超高精度OCRエンジンです。
-
-ルール：
-- 画像内の文字をそのまま抽出
-- 改行・段落構造を維持
-- 推測は禁止
-- 補完は禁止
-- 意味解釈は禁止
-- 出力は純テキストのみ
-          `.trim(),                                                                                                                    },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "画像内の文字をすべて正確に抽出してください",
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: imageUrl,
-              },
-            },
-          ],
-        },
-      ],
-    });
-
-    // ================================
-    // � 結果取得
-    // ================================
-    const text = res?.choices?.[0]?.message?.content?.trim() || "";
-
-    if (!text) {
-      console.warn("⚠️ OCR returned empty result");
-
-      return {
-        text: "",
-        success: false,
-        reason: "empty_result",
-      };
-    }
-
-    console.log("✅ OCR SUCCESS");
-
-    return {
-      text,
-      success: true,
-      reason: "ok",
-    };
+    return text;
 
   } catch (err) {
-
+    console.error("❌ OCRエラー:", err);
+    return "";
+  } finally {
     // ================================
-    // ❌ エラーハンドリング（可視化）
+    // ④ Worker解放（メモリ対策）
     // ================================
-    console.error("❌ OCR error:", err);
+    if (worker) {
+      try {
+        await worker.terminate();
+      } catch (e) {
+        console.warn("⚠️ worker terminate失敗:", e);
+      }
+    }
+  }
+}
 
-    return {
-      text: "",                                                                      success: false,                                                                reason: "ocr_exception",
-    };
-  }                                                                            }
-
-module.exports = { extractTextFromImage };
+// ================================
+// 📤 エクスポート
+// ================================
+module.exports = { runOCR };

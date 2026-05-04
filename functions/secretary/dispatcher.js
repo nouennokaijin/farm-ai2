@@ -1,177 +1,95 @@
 // secretary/dispatcher.js
-// 📡 司令塔（Orchestrator）
-//
-// 🎯 役割
-// - 入力の統一
-// - ルーティング
-// - handlerへ“同一フォーマット”で渡す
+// 2026/05/04
+// 📡 LINEイベントの司令塔
+// ・メッセージ受信
+// ・ルール判定（ruleEngine）
+// ・必要時のみAIへフォールバック
+// ・最終的に処理を振り分ける（post / receipt / schedule / ocr / chat）
 
-const axios = require("axios");
-const { dispatcherAI } = require("./dispatcherAI");
+// ================================
+// 🧠 依存モジュール（同一ディレクトリ）
+// ================================
+const { ruleEngine } = require("./ruleEngine");
+const { classifyAI } = require("./classifyAI");
+const { ocrTxtAI } = require("./ocrTxtAI");
 
-// ======================================================
-// 🧩 Handlers（関数として統一）
-// ======================================================
-const chatHandler = require("../handlers/chatHandler");
-const postHandler = require("../handlers/postHandler");
-const receiptHandler = require("../handlers/receiptHandler");
-const scheduleHandler = require("../handlers/scheduleHandler");
-const ocrHandler = require("../handlers/ocrHandler"); // ← 直接関数
-
-// ======================================================
-// 🗺 ルーティングテーブル
-// ======================================================
-const routeMap = {
-  chat: chatHandler,
-  post: postHandler,
-  receipt: receiptHandler,
-  schedule: scheduleHandler,
-  ocr: ocrHandler,
-};
-
-// ======================================================
-// 📊 AIログ
-// ======================================================
-let aiCallCount = 0;
-
-function logAICall(label) {
-  aiCallCount++;
-  console.log(`📊 AI CALL #${aiCallCount} → ${label}`);
+// ================================
+// 🧩 各処理（仮実装）
+// ================================
+async function handlePost(event) {
+  console.log("📝 投稿処理開始");
 }
 
-// ======================================================
-// 📥 LINE画像取得
-// ======================================================
-async function downloadLineImage(messageId) {
-  const url = `https://api-data.line.me/v2/bot/message/${messageId}/content`;
-
-  const res = await axios.get(url, {
-    responseType: "arraybuffer",
-    headers: {
-      Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
-    },
-  });
-
-  return Buffer.from(res.data);
+async function handleReceipt(event) {
+  console.log("💰 レシート処理開始");
 }
 
-// ======================================================
-// 🧠 ルール判定
-// ======================================================
-function ruleLayer(text = "") {
-  const t = (text || "").toLowerCase();
-
-  if (t.includes("投稿") || t.includes("メモ")) return "post";
-  if (t.includes("レシート") || t.includes("領収書")) return "receipt";
-  if (t.includes("予定") || t.includes("スケジュール")) return "schedule";
-
-  if (
-    t.includes("ocr") ||
-    t.includes("おｃｒ") ||
-    t.includes("読み取り") ||
-    t.includes("画像") ||
-    t.includes("写真")
-  ) return "ocr";
-
-  return null;
+async function handleSchedule(event) {
+  console.log("📅 スケジュール処理開始");
 }
 
-// ======================================================
-// 🚚 Handler実行（完全統一フォーマット）
-// ======================================================
-async function dispatchToHandler({ route, text, imageBuffer, event }) {
-  const handler = routeMap[route];
-
-  if (typeof handler !== "function") {
-    console.warn("⚠️ Handler not found:", route);
-    return null;
-  }
-
-  console.log(`🚚 HANDOFF → ${route}`);
-
-  return await handler({
-    text,
-    imageBuffer,
-    event,
-  });
+async function handleOCR(event) {
+  console.log("🔍 OCR処理開始");
 }
 
-// ======================================================
-// 🚀 dispatcher本体
-// ======================================================
+async function handleChat(event) {
+  console.log("💬 チャット処理開始");
+}
+
+// ================================
+// 🚀 メイン処理
+// ================================
 async function dispatcher(event) {
   try {
-    if (!event?.message) return null;
+    console.log("📥 イベント受信:", event.message?.type);
 
-    const type = event.message.type;
+    // ① ルール判定
+    let result = await ruleEngine(event);
+    console.log("🧠 ルール判定結果:", result);
 
-    console.log("📥 EVENT TYPE:", type);
+    // ② AIフォールバック（"0" のときのみ）
+    if (result === "0") {
+      console.log("🤖 AIフォールバック開始");
 
-    // ==================================================
-    // 🖼 IMAGE
-    // ==================================================
-    if (type === "image") {
-
-      const imageBuffer = await downloadLineImage(event.message.id);
-
-      // 👉 OCRだけ先に実行（分類用）
-      const ocrResult = await ocrHandler({
-        imageBuffer,
-        event,
-      });
-
-      const text = ocrResult?.text || "";
-
-      let route = ruleLayer(text);
-
-      if (!route) {
-        logAICall("image fallback");
-
-        route = await dispatcherAI({
-          text: "",
-          ocr: text,
-        });
+      if (event.message?.type === "text") {
+        result = await classifyAI(event.message.text || "");
       }
 
-      return await dispatchToHandler({
-        route,
-        text,
-        imageBuffer,
-        event,
-      });
-    }
+      if (event.message?.type === "image") {
+        const imageUrl = event.imageUrl; // Cloudinary等の公開URL想定
 
-    // ==================================================
-    // 📝 TEXT
-    // ==================================================
-    if (type === "text") {
-
-      const text = event.message.text;
-
-      let route = ruleLayer(text);
-
-      if (!route) {
-        logAICall("text fallback");
-
-        route = await dispatcherAI({
-          text,
-          ocr: "",
-        });
+        if (!imageUrl) {
+          console.warn("⚠️ imageUrl未設定");
+          result = "chat";
+        } else {
+          result = await ocrTxtAI(imageUrl);
+        }
       }
-
-      return await dispatchToHandler({
-        route,
-        text,
-        event,
-      });
     }
 
-    return null;
+    console.log("🎯 最終判定:", result);
+
+    // ③ 分岐
+    switch (result) {
+      case "post":
+        return handlePost(event);
+      case "receipt":
+        return handleReceipt(event);
+      case "schedule":
+        return handleSchedule(event);
+      case "ocr":
+        return handleOCR(event);
+      case "chat":
+      default:
+        return handleChat(event);
+    }
 
   } catch (err) {
-    console.error("🔥 dispatcher error:", err);
-    return null;
+    console.error("❌ dispatcherエラー:", err);
   }
 }
 
+// ================================
+// 📤 エクスポート
+// ================================
 module.exports = { dispatcher };
