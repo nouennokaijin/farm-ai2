@@ -1,88 +1,112 @@
 // secretary/dispatcher.js
 // 2026/05/04
-// 📡 LINEイベントの司令塔
-// ・メッセージ受信
-// ・ルール判定（ruleEngine）
-// ・必要時のみAIへフォールバック
-// ・最終的に処理を振り分ける（post / receipt / schedule / ocr / chat）
+// 📡 LINEイベントの司令塔（完成版）
+// ・LINEメッセージ受信
+// ・ルール判定 → AIフォールバック
+// ・画像はダウンロード → Cloudinary → OCR
+// ・タグ生成
+// ・Notion保存
 
 // ================================
-// 🧠 依存モジュール（同一ディレクトリ）
+// 🧠 依存モジュール（secretary）
 // ================================
 const { ruleEngine } = require("./ruleEngine");
 const { classifyAI } = require("./classifyAI");
 const { ocrTxtAI } = require("./ocrTxtAI");
 
 // ================================
-// 🧩 各処理（仮実装）
+// 🧠 外部ユーティリティ
 // ================================
-async function handlePost(event) {
-  console.log("📝 投稿処理開始");
-}
-
-async function handleReceipt(event) {
-  console.log("💰 レシート処理開始");
-}
-
-async function handleSchedule(event) {
-  console.log("📅 スケジュール処理開始");
-}
-
-async function handleOCR(event) {
-  console.log("🔍 OCR処理開始");
-}
-
-async function handleChat(event) {
-  console.log("💬 チャット処理開始");
-}
+const { downloadLineMedia } = require("../utils/downloadLineMedia");
+const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
+const { buildTags } = require("../utils/tagger");
+const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
+const { runOCR } = require("../utils/ocr");
 
 // ================================
 // 🚀 メイン処理
 // ================================
 async function dispatcher(event) {
   try {
-    console.log("📥 イベント受信:", event.message?.type);
+    console.log("📥 受信:", event.message?.type);
 
-    // ① ルール判定
     let result = await ruleEngine(event);
-    console.log("🧠 ルール判定結果:", result);
+    console.log("🧠 ルール判定:", result);
 
-    // ② AIフォールバック（"0" のときのみ）
+    let userText = "";
+    let ocrText = "";
+    let imageUrl = "";
+
+    // ================================
+    // 📝 テキスト
+    // ================================
+    if (event.message?.type === "text") {
+      userText = event.message.text || "";
+    }
+
+    // ================================
+    // 🖼 画像
+    // ================================
+    if (event.message?.type === "image") {
+      const messageId = event.message.id;
+
+      // ① LINEから取得
+      const buffer = await downloadLineMedia(messageId);
+
+      // ② Cloudinaryアップロード
+      imageUrl = await uploadToCloudinary(buffer, "line_image");
+
+      // ③ OCR（テキスト保存用）
+      ocrText = await runOCR(imageUrl);
+    }
+
+    // ================================
+    // 🤖 AIフォールバック
+    // ================================
     if (result === "0") {
-      console.log("🤖 AIフォールバック開始");
+      console.log("🤖 AI判定へ");
 
-      if (event.message?.type === "text") {
-        result = await classifyAI(event.message.text || "");
+      if (event.message.type === "text") {
+        result = await classifyAI(userText);
       }
 
-      if (event.message?.type === "image") {
-        const imageUrl = event.imageUrl; // Cloudinary等の公開URL想定
-
-        if (!imageUrl) {
-          console.warn("⚠️ imageUrl未設定");
-          result = "chat";
-        } else {
-          result = await ocrTxtAI(imageUrl);
-        }
+      if (event.message.type === "image") {
+        result = await ocrTxtAI(imageUrl);
       }
     }
 
-    console.log("🎯 最終判定:", result);
+    console.log("🎯 最終分類:", result);
 
-    // ③ 分岐
-    switch (result) {
-      case "post":
-        return handlePost(event);
-      case "receipt":
-        return handleReceipt(event);
-      case "schedule":
-        return handleSchedule(event);
-      case "ocr":
-        return handleOCR(event);
-      case "chat":
-      default:
-        return handleChat(event);
-    }
+    // ================================
+    // 🏷 タグ生成（日本語）
+    // ================================
+    const typeMap = {
+      post: "投稿",
+      receipt: "レシート",
+      schedule: "予定",
+      ocr: "OCR",
+      chat: "チャット",
+    };
+
+    const tags = await buildTags({
+      text: userText || ocrText,
+      type: typeMap[result] || "チャット",
+    });
+
+    console.log("🏷 タグ:", tags);
+
+    // ================================
+    // 💾 Notion保存
+    // ================================
+    await saveMsgToNotion({
+      title: tags[0] || "メモ",
+      userText,
+      ocrText,
+      tags,
+      files: imageUrl ? [imageUrl] : [],
+    });
+
+    console.log("✅ 完了");
 
   } catch (err) {
     console.error("❌ dispatcherエラー:", err);
