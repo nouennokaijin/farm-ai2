@@ -1,19 +1,11 @@
 // handlers/ocrHandler.js
 // 2026/5/2
-// 📖 本・説明パンフレット専用OCRハンドラー（A/B分離設計）
-//
-// ルール：
-// - OCRは事実（格納A）
-// - AIは解釈（格納B）
-// - レシート・スケジュールとは完全分離
-// - dispatcherには戻らない
+// 📖 OCRハンドラー（A/B分離設計）
 
 const { buildTags } = require("../utils/tagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
-
 const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
-
 const smartOCR = require("../utils/ocr");
 
 const Groq = require("groq-sdk");
@@ -22,9 +14,9 @@ const client = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-// ================================
-// 🧠 AI（格納B生成：要約・補完）
-// ================================
+// ======================================================
+// 🧠 AI要約生成
+// ======================================================
 async function generateInsight(text) {
   try {
     if (!text) return "";
@@ -35,19 +27,7 @@ async function generateInsight(text) {
       messages: [
         {
           role: "system",
-          content: `
-あなたはOCR文章の理解AIです。
-
-役割：
-- 要約
-- 構造化
-- 重要ポイント抽出
-
-ルール：
-- 推測禁止
-- 情報追加禁止
-- 原文依存
-          `.trim(),
+          content: "OCR内容の要約・構造化・重要抽出のみ（推測禁止）",
         },
         { role: "user", content: text },
       ],
@@ -55,28 +35,25 @@ async function generateInsight(text) {
 
     return res?.choices?.[0]?.message?.content?.trim() || "";
   } catch (e) {
-    console.error("AI insight error:", e);
+    console.error("AI error:", e);
     return "";
   }
 }
 
-// ================================
-// 📖 OCRハンドラー本体
-// ================================
+// ======================================================
+// 📖 OCR handler本体
+// ======================================================
 async function handleOCR({ text = "", imageIds = [], fileIds = [] }) {
   try {
     const allIds = [...imageIds, ...fileIds];
 
-    // ================================
-    // 🚨 入力ガード
-    // ================================
     if (!text && allIds.length === 0) {
       return { ok: false, reason: "no_input" };
     }
 
-    // ================================
-    // 📤 LINE → Cloudinary
-    // ================================
+    // ==================================================
+    // 📤 upload
+    // ==================================================
     const fileUrls = (
       await Promise.all(
         allIds.map(async (id) => {
@@ -92,89 +69,71 @@ async function handleOCR({ text = "", imageIds = [], fileIds = [] }) {
 
             return { id, url };
           } catch (err) {
-            console.error("upload error:", id, err);
+            console.error("upload error:", err);
             return null;
           }
         })
       )
     ).filter(Boolean);
 
-    // ================================
-    // 🔍 OCR（格納A生成）
-    // ================================
-    let rawText = "";
-    let ocrTextA = "";
+    // ==================================================
+    // 🔍 OCR
+    // ==================================================
+    let ocrText = "";
 
     for (const file of fileUrls) {
       try {
         const result = await smartOCR(file.url);
-
-        const text = result?.rawText || "";
-
-        rawText += `\n[${file.id}]\n${text}`;
-        ocrTextA += `\n[${file.id}]\n${text}`;
-      } catch (err) {
-        console.error("OCR error:", file.id, err);
+        const t = result?.rawText || "";
+        ocrText += `\n[${file.id}]\n${t}`;
+      } catch (e) {
+        console.error("OCR error:", e);
       }
     }
 
-    ocrTextA = (ocrTextA || text).trim();
+    ocrText = (ocrText || text).trim();
 
-    if (!ocrTextA) {
+    if (!ocrText) {
       return { ok: false, reason: "empty_result" };
     }
 
-    // ================================
-    // 🧠 AI処理（格納B生成）
-    // ================================
-    const aiInsight = await generateInsight(ocrTextA);
+    // ==================================================
+    // 🧠 AI
+    // ==================================================
+    const insight = await generateInsight(ocrText);
 
-    // ================================
-    // 🏷 タグ生成
-    // ================================
+    // ==================================================
+    // 🏷 tags
+    // ==================================================
     const tags = await buildTags({
-      text: ocrTextA,
+      text: ocrText,
       type: "OCR",
     });
 
-    // ================================
+    // ==================================================
     // 📦 Notion保存（非同期）
-    // ================================
+    // ==================================================
     setImmediate(() => {
       saveMsgToNotion({
-        title: "OCRログ（A/B分離・書籍系）",
-
-        // 🧾 入力
+        title: "OCRログ",
         userText: text,
-
-        // 📌 格納A：OCR原文
-        ocrText: ocrTextA,
-
-        // 🤖 格納B：AI要約
-        aiInsight,
-
-        // 📎 添付
+        ocrText,
+        aiInsight: insight,
         files: fileUrls.map(f => f.url),
-
-        // 🏷 タグ
         tags,
-
         type: "OCR",
       }).catch(console.error);
     });
 
-    // ================================
-    // 📤 戻り値
-    // ================================
     return {
       ok: true,
-      text: ocrTextA,
-      insight: aiInsight,
+      text: ocrText,
+      insight,
       tags,
     };
 
   } catch (e) {
-    console.error("OCR handler fatal error:", e);
+    console.error("OCR handler error:", e);
     return { ok: false, error: e.message };
   }
 }

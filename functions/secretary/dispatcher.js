@@ -1,106 +1,77 @@
 // secretary/dispatcher.js
 // 2026/05/03
 // 📡 LINEイベントの司令塔（ルーティング中枢）
-//
-// このファイルの役割：
-// ・LINEイベントを受け取る
-// ・text / image を判定する
-// ・必要に応じてOCRを実行する
-// ・60秒の追加入力待機を行う
-// ・ルールベース or AIでルート決定する
-// ・最終的にHandlerへ処理を渡す
 
-// ======================================================
-// 🌐 HTTP通信ライブラリ（LINE画像取得用）
-// ======================================================
 const axios = require("axios");
-
-// ======================================================
-// 🤖 AIルーティング判定関数（フォールバック用）
-// ======================================================
 const { dispatcherAI } = require("./dispatcherAI");
 
 // ======================================================
-// 🧩 各Handlerの読み込み
-// 👉 最終的な処理先（実行部隊）
+// 🧩 Handlers（実行部隊）
 // ======================================================
-const chatHandler = require("../handlers/chatHandler");       
-const postHandler = require("../handlers/postHandler");       
-const ocrHandler = require("../handlers/ocrHandler");         
-const receiptHandler = require("../handlers/receiptHandler"); 
+const chatHandler = require("../handlers/chatHandler");
+const postHandler = require("../handlers/postHandler");
+const receiptHandler = require("../handlers/receiptHandler");
 const scheduleHandler = require("../handlers/scheduleHandler");
+const ocrHandler = require("../handlers/ocrHandler");
 
 // ======================================================
 // 🗺 ルーティングテーブル
-// 👉 route文字列 → 実行Handlerへの変換表
 // ======================================================
 const routeMap = {
   chat: chatHandler,
   post: postHandler,
-  ocr: ocrHandler,
   receipt: receiptHandler,
   schedule: scheduleHandler,
+  ocr: ocrHandler,
 };
 
 // ======================================================
-// 📊 AI呼び出し回数カウンター（コスト監視）
+// 📊 AIコストログ
 // ======================================================
 let aiCallCount = 0;
 
-// ======================================================
-// 📊 AI呼び出しログ
-// ======================================================
 function logAICall(label) {
   aiCallCount++;
   console.log(`📊 AI CALL #${aiCallCount} → ${label}`);
 }
 
 // ======================================================
-// 🧠 OCR関数の遅延ロード
-// 👉 循環参照防止 & 初期化遅延
+// 🧠 OCR遅延ロード（修正版：関数直呼び防止）
 // ======================================================
 let handleOCR = null;
 
 function getOCR() {
   if (!handleOCR) {
     const mod = require("../handlers/ocrHandler");
-    handleOCR = mod.handleOCR || mod.default || mod;
+    handleOCR = mod.handleOCR;
   }
   return handleOCR;
 }
 
 // ======================================================
-// 🧠 超軽量ルール判定レイヤー（無料ゾーン）
-// 👉 AIを使わず即座にルート判定する部分
+// 🧠 ルール判定（軽量分岐）
 // ======================================================
 function ruleLayer(text = "") {
-  const t = text.toLowerCase();
-/*
+  const t = (text || "").toLowerCase();
+
   if (t.includes("投稿") || t.includes("メモ")) return "post";
   if (t.includes("レシート") || t.includes("領収書")) return "receipt";
   if (t.includes("予定") || t.includes("スケジュール")) return "schedule";
-  if (t.includes("画像") || t.includes("写真") || t.includes("読み取り")) return "ocr";
-  if (t.length > 0) return "chat";
+
+  // OCRトリガー（日本語ゆれ対応）
+  if (
+    t.includes("ocr") ||
+    t.includes("おｃｒ") ||
+    t.includes("読み取り") ||
+    t.includes("画像") ||
+    t.includes("写真")
+  ) return "ocr";
 
   return null;
 }
-*/
-     if (t.includes("投稿") || t.includes("メモ")) {
-     return "post";
-   } else if (t.includes("レシート") || t.includes("領収書")) {
-     return "receipt";
-   } else if (t.includes("予定") || t.includes("スケジュール")) {
-     return "schedule";
-   } else if (t.includes("ocr") || t.includes("おｃｒ") || t.includes("読み取り")) {
-     return "ocr";
-   } else {
-     return null;
-   }
-}
 
 // ======================================================
-// 📥 LINE画像ダウンロード
-// 👉 messageIdから画像バイナリ取得
+// 📥 LINE画像取得
 // ======================================================
 async function downloadLineImage(messageId) {
   const url = `https://api-data.line.me/v2/bot/message/${messageId}/content`;
@@ -117,15 +88,13 @@ async function downloadLineImage(messageId) {
 }
 
 // ======================================================
-// ⏳ 60秒テキスト待機（追加入力監視）
+// ⏳ テキスト待機
 // ======================================================
 function waitForText(event, timeoutMs = 60000) {
   return new Promise((resolve) => {
-
     const start = Date.now();
 
     const interval = setInterval(() => {
-
       const text = event?.message?.text;
 
       if (text) {
@@ -137,22 +106,20 @@ function waitForText(event, timeoutMs = 60000) {
         clearInterval(interval);
         resolve(null);
       }
-
     }, 1000);
   });
 }
 
 // ======================================================
-// 🚚 Handlerへ転送（ルーティング実行）
+// 🚚 Handler実行
 // ======================================================
 async function dispatchToHandler(result, event) {
-
   if (!result?.route) return null;
 
   const handler = routeMap[result.route];
 
-  if (!handler) {
-    console.warn("⚠️ Unknown route:", result.route);
+  if (typeof handler !== "function") {
+    console.warn("⚠️ Handler not found or invalid:", result.route);
     return null;
   }
 
@@ -165,12 +132,10 @@ async function dispatchToHandler(result, event) {
 }
 
 // ======================================================
-// 🚀 dispatcher本体（司令塔）
+// 🚀 dispatcher本体
 // ======================================================
 async function dispatcher(event) {
-
   try {
-
     if (!event?.message) return null;
 
     const type = event.message.type;
@@ -178,10 +143,9 @@ async function dispatcher(event) {
     console.log("📥 EVENT TYPE:", type);
 
     // ==================================================
-    // 🖼 IMAGE FLOW（画像処理ルート）
+    // 🖼 IMAGE FLOW
     // ==================================================
     if (type === "image") {
-
       console.log("🖼 IMAGE FLOW START");
 
       const imageBuffer = await downloadLineImage(event.message.id);
@@ -194,17 +158,15 @@ async function dispatcher(event) {
         messageId: event.message.id,
       });
 
-      console.log("📄 OCR RESULT:", ocrResult);
+      const text = ocrResult?.text || ocrResult || "";
 
-      let route = ruleLayer(ocrResult);
+      console.log("📄 OCR RESULT:", text);
+
+      let route = ruleLayer(text);
 
       if (route) {
         console.log("⚡ RULE MATCH (OCR):", route);
-
-        return await dispatchToHandler(
-          { route, data: ocrResult },
-          event
-        );
+        return await dispatchToHandler({ route, data: text }, event);
       }
 
       console.log("⏳ waiting for follow-up text...");
@@ -217,10 +179,7 @@ async function dispatcher(event) {
         const r = ruleLayer(waitedText);
 
         if (r) {
-          return await dispatchToHandler(
-            { route: r, data: waitedText },
-            event
-          );
+          return await dispatchToHandler({ route: r, data: waitedText }, event);
         }
       }
 
@@ -228,20 +187,16 @@ async function dispatcher(event) {
 
       const routeAI = await dispatcherAI({
         text: waitedText || "",
-        ocr: ocrResult,
+        ocr: text,
       });
 
-      return await dispatchToHandler(
-        { route: routeAI, data: ocrResult },
-        event
-      );
+      return await dispatchToHandler({ route: routeAI, data: text }, event);
     }
 
     // ==================================================
-    // 📝 TEXT FLOW（テキスト処理ルート）
+    // 📝 TEXT FLOW
     // ==================================================
     if (type === "text") {
-
       const text = event.message.text;
 
       console.log("📝 TEXT:", text);
@@ -250,11 +205,7 @@ async function dispatcher(event) {
 
       if (route) {
         console.log("⚡ RULE MATCH:", route);
-
-        return await dispatchToHandler(
-          { route, data: text },
-          event
-        );
+        return await dispatchToHandler({ route, data: text }, event);
       }
 
       logAICall("text fallback");
@@ -264,10 +215,7 @@ async function dispatcher(event) {
         ocr: "",
       });
 
-      return await dispatchToHandler(
-        { route: routeAI, data: text },
-        event
-      );
+      return await dispatchToHandler({ route: routeAI, data: text }, event);
     }
 
     return null;
@@ -278,7 +226,4 @@ async function dispatcher(event) {
   }
 }
 
-// ======================================================
-// 📦 外部公開
-// ======================================================
 module.exports = { dispatcher };
