@@ -1,20 +1,18 @@
 // handlers/ocrHandler.js
 // 2026/5/2
-// 📖 OCRハンドラー（完全入力統一版）
+// 📖 OCRハンドラー（関数統一版）
 //
 // 🎯 役割
-// - 画像 → OCR抽出
+// - 画像 or テキスト → OCR結果生成
 // - AI要約生成
 // - Notion保存
 //
-// 🚨 重要
-// - dispatcherから渡される形式に完全依存しない
-// - 入力はすべて統一オブジェクトで受ける
+// 🚨 ルール
+// - dispatcherからは「関数として直接呼ばれる」前提
+// - 入力は統一オブジェクト
 
 const { buildTags } = require("../utils/tagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
-const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
-const { downloadLineMedia } = require("../utils/downloadLineMedia");
 const smartOCR = require("../utils/ocr");
 
 const Groq = require("groq-sdk");
@@ -50,21 +48,16 @@ async function generateInsight(text) {
 }
 
 // ======================================================
-// 📖 OCR handler本体（統一入力）
+// 📖 OCRメイン関数（dispatcher直呼び前提）
 // ======================================================
-async function handleOCR({ text = "", imageBuffer, event }) {
+async function handleOCR({ text = "", imageBuffer, event } = {}) {
   try {
-
-    // ==================================================
     // 🚨 入力チェック
-    // ==================================================
     if (!imageBuffer && !text) {
       return { ok: false, reason: "no_input" };
     }
 
-    // ==================================================
-    // 🔍 OCR実行
-    // ==================================================
+    // 🔍 OCR処理
     let ocrText = "";
 
     if (imageBuffer) {
@@ -82,22 +75,16 @@ async function handleOCR({ text = "", imageBuffer, event }) {
       return { ok: false, reason: "empty_result" };
     }
 
-    // ==================================================
     // 🧠 AI要約
-    // ==================================================
     const insight = await generateInsight(ocrText);
 
-    // ==================================================
-    // 🏷 タグ
-    // ==================================================
+    // 🏷 タグ生成
     const tags = await buildTags({
       text: ocrText,
       type: "OCR",
     });
 
-    // ==================================================
     // 📦 Notion保存（非同期）
-    // ==================================================
     setImmediate(() => {
       saveMsgToNotion({
         title: "OCRログ",
@@ -109,9 +96,7 @@ async function handleOCR({ text = "", imageBuffer, event }) {
       }).catch(console.error);
     });
 
-    // ==================================================
-    // 📤 戻り値
-    // ==================================================
+    // 📤 結果返却
     return {
       ok: true,
       text: ocrText,
@@ -125,4 +110,5 @@ async function handleOCR({ text = "", imageBuffer, event }) {
   }
 }
 
-module.exports = { handleOCR };
+// 👉 重要：関数そのものをエクスポート
+module.exports = handleOCR;

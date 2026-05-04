@@ -1,31 +1,27 @@
 // secretary/dispatcher.js
 // 2026/05/03
-// 📡 LINEイベントの司令塔（ルーティング中枢）
+// 📡 LINEイベント司令塔（完全関数統一版）
 //
-// 🎯 役割整理
-// - 入力解析（text / image）
-// - OCR実行（必要時のみ）
-// - ルート決定（rule / AI）
-// - handlerへ“統一フォーマット”で渡す
-//
-// 🚨 原則
-// - handlerには「同じ形のデータ」を渡す
-// - handler側で入力差分を吸収しない（重要）
+// 🎯 役割
+// - 入力解析
+// - OCR実行
+// - ルート決定
+// - handlerへ統一データで渡す
 
 const axios = require("axios");
 const { dispatcherAI } = require("./dispatcherAI");
 
 // ======================================================
-// 🧩 Handlers（実行部隊）
+// 🧩 Handlers（全て関数として扱う）
 // ======================================================
 const chatHandler = require("../handlers/chatHandler");
 const postHandler = require("../handlers/postHandler");
 const receiptHandler = require("../handlers/receiptHandler");
 const scheduleHandler = require("../handlers/scheduleHandler");
-const ocrHandler = require("../handlers/ocrHandler");
+const ocrHandler = require("../handlers/ocrHandler"); // ← 関数そのもの
 
 // ======================================================
-// 🗺 ルーティングテーブル
+// 🗺 ルーティング
 // ======================================================
 const routeMap = {
   chat: chatHandler,
@@ -36,7 +32,7 @@ const routeMap = {
 };
 
 // ======================================================
-// 📊 AIコストログ
+// 📊 AIログ
 // ======================================================
 let aiCallCount = 0;
 
@@ -63,7 +59,7 @@ async function downloadLineImage(messageId) {
 }
 
 // ======================================================
-// ⏳ 追加入力待機
+// ⏳ テキスト待機
 // ======================================================
 function waitForText(event, timeoutMs = 60000) {
   return new Promise((resolve) => {
@@ -86,7 +82,7 @@ function waitForText(event, timeoutMs = 60000) {
 }
 
 // ======================================================
-// 🧠 軽量ルール判定（事業部）
+// 🧠 ルール判定
 // ======================================================
 function ruleLayer(text = "") {
   const t = (text || "").toLowerCase();
@@ -107,7 +103,7 @@ function ruleLayer(text = "") {
 }
 
 // ======================================================
-// 🚚 Handler実行（統一インターフェース）
+// 🚚 handler実行（関数直呼び統一）
 // ======================================================
 async function dispatchToHandler({ route, text, imageBuffer, event }) {
   const handler = routeMap[route];
@@ -119,9 +115,7 @@ async function dispatchToHandler({ route, text, imageBuffer, event }) {
 
   console.log(`🚚 HANDOFF → ${route}`);
 
-  // 👉 全handler共通フォーマット
   return await handler({
-    route,
     text,
     imageBuffer,
     event,
@@ -147,9 +141,7 @@ async function dispatcher(event) {
 
       const imageBuffer = await downloadLineImage(event.message.id);
 
-      const ocr = require("../handlers/ocrHandler").handleOCR;
-
-      const ocrResult = await ocr({
+      const ocrResult = await ocrHandler({
         imageBuffer,
         event,
       });
@@ -195,7 +187,7 @@ async function dispatcher(event) {
 
       return await dispatchToHandler({
         route: routeAI,
-        text: text,
+        text,
         imageBuffer,
         event,
       });
