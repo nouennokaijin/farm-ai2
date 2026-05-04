@@ -85,18 +85,18 @@ function ruleLayer(text = "") {
   return null;
 }
 */
-  if (t.includes("投稿") || t.includes("メモ")) {
-  return "post";
-} else if (t.includes("レシート") || t.includes("領収書")) {
-  return "receipt";
-} else if (t.includes("予定") || t.includes("スケジュール")) {
-  return "schedule";
-} else if (t.includes("ocr") || t.includes("おｃｒ") || t.includes("読み取り")) {
-  return "ocr";
-} else {
-  return null;
+     if (t.includes("投稿") || t.includes("メモ")) {
+     return "post";
+   } else if (t.includes("レシート") || t.includes("領収書")) {
+     return "receipt";
+   } else if (t.includes("予定") || t.includes("スケジュール")) {
+     return "schedule";
+   } else if (t.includes("ocr") || t.includes("おｃｒ") || t.includes("読み取り")) {
+     return "ocr";
+   } else {
+     return null;
+   }
 }
-
 
 // ======================================================
 // 📥 LINE画像ダウンロード
