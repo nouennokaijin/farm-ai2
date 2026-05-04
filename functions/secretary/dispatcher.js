@@ -1,31 +1,15 @@
 // secretary/dispatcher.js
-// 2026/05/04
-// 📡 LINEイベントの司令塔（完成版）
-// ・LINEメッセージ受信
-// ・ルール判定 → AIフォールバック
-// ・画像はダウンロード → Cloudinary → OCR
-// ・タグ生成
-// ・Notion保存
 
-// ================================
-// 🧠 依存モジュール（secretary）
-// ================================
 const { ruleEngine } = require("./ruleEngine");
 const { classifyAI } = require("./classifyAI");
 const { ocrTxtAI } = require("./ocrTxtAI");
 
-// ================================
-// 🧠 外部ユーティリティ
-// ================================
 const { downloadLineMedia } = require("../utils/downloadLineMedia");
-const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 const { buildTags } = require("../utils/tagger");
 const { saveMsgToNotion } = require("../utils/saveMsgToNotion");
-const { runOCR } = require("../utils/ocr");
 
-// ================================
-// 🚀 メイン処理
-// ================================
+const handleOCR = require("../handlers/ocrHandler");
+
 async function dispatcher(event) {
   try {
     console.log("📥 受信:", event.message?.type);
@@ -37,32 +21,23 @@ async function dispatcher(event) {
     let ocrText = "";
     let imageUrl = "";
 
-    // ================================
-    // 📝 テキスト
-    // ================================
     if (event.message?.type === "text") {
       userText = event.message.text || "";
     }
 
-    // ================================
-    // 🖼 画像
-    // ================================
     if (event.message?.type === "image") {
       const messageId = event.message.id;
 
-      // ① LINEから取得
       const buffer = await downloadLineMedia(messageId);
 
-      // ② Cloudinaryアップロード
-      imageUrl = await uploadToCloudinary(buffer, "line_image");
+      const resultOCR = await handleOCR({
+        imageBuffer: buffer,
+        event,
+      });
 
-      // ③ OCR（テキスト保存用）
-      ocrText = await runOCR(imageUrl);
+      ocrText = resultOCR.text || "";
     }
 
-    // ================================
-    // 🤖 AIフォールバック
-    // ================================
     if (result === "0") {
       console.log("🤖 AI判定へ");
 
@@ -71,15 +46,12 @@ async function dispatcher(event) {
       }
 
       if (event.message.type === "image") {
-        result = await ocrTxtAI(imageUrl);
+        result = await ocrTxtAI(ocrText);
       }
     }
 
     console.log("🎯 最終分類:", result);
 
-    // ================================
-    // 🏷 タグ生成（日本語）
-    // ================================
     const typeMap = {
       post: "投稿",
       receipt: "レシート",
@@ -95,9 +67,6 @@ async function dispatcher(event) {
 
     console.log("🏷 タグ:", tags);
 
-    // ================================
-    // 💾 Notion保存
-    // ================================
     await saveMsgToNotion({
       title: tags[0] || "メモ",
       userText,
@@ -113,7 +82,4 @@ async function dispatcher(event) {
   }
 }
 
-// ================================
-// 📤 エクスポート
-// ================================
 module.exports = { dispatcher };
