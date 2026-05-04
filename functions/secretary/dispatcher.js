@@ -1,27 +1,25 @@
 // secretary/dispatcher.js
-// 2026/05/03
-// 📡 LINEイベント司令塔（完全関数統一版）
+// 📡 司令塔（Orchestrator）
 //
 // 🎯 役割
-// - 入力解析
-// - OCR実行
-// - ルート決定
-// - handlerへ統一データで渡す
+// - 入力の統一
+// - ルーティング
+// - handlerへ“同一フォーマット”で渡す
 
 const axios = require("axios");
 const { dispatcherAI } = require("./dispatcherAI");
 
 // ======================================================
-// 🧩 Handlers（全て関数として扱う）
+// 🧩 Handlers（関数として統一）
 // ======================================================
 const chatHandler = require("../handlers/chatHandler");
 const postHandler = require("../handlers/postHandler");
 const receiptHandler = require("../handlers/receiptHandler");
 const scheduleHandler = require("../handlers/scheduleHandler");
-const ocrHandler = require("../handlers/ocrHandler"); // ← 関数そのもの
+const ocrHandler = require("../handlers/ocrHandler"); // ← 直接関数
 
 // ======================================================
-// 🗺 ルーティング
+// 🗺 ルーティングテーブル
 // ======================================================
 const routeMap = {
   chat: chatHandler,
@@ -52,33 +50,9 @@ async function downloadLineImage(messageId) {
     headers: {
       Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
     },
-    timeout: 10000,
   });
 
   return Buffer.from(res.data);
-}
-
-// ======================================================
-// ⏳ テキスト待機
-// ======================================================
-function waitForText(event, timeoutMs = 60000) {
-  return new Promise((resolve) => {
-    const start = Date.now();
-
-    const interval = setInterval(() => {
-      const text = event?.message?.text;
-
-      if (text) {
-        clearInterval(interval);
-        resolve(text);
-      }
-
-      if (Date.now() - start > timeoutMs) {
-        clearInterval(interval);
-        resolve(null);
-      }
-    }, 1000);
-  });
 }
 
 // ======================================================
@@ -103,7 +77,7 @@ function ruleLayer(text = "") {
 }
 
 // ======================================================
-// 🚚 handler実行（関数直呼び統一）
+// 🚚 Handler実行（完全統一フォーマット）
 // ======================================================
 async function dispatchToHandler({ route, text, imageBuffer, event }) {
   const handler = routeMap[route];
@@ -134,13 +108,13 @@ async function dispatcher(event) {
     console.log("📥 EVENT TYPE:", type);
 
     // ==================================================
-    // 🖼 IMAGE FLOW
+    // 🖼 IMAGE
     // ==================================================
     if (type === "image") {
-      console.log("🖼 IMAGE FLOW START");
 
       const imageBuffer = await downloadLineImage(event.message.id);
 
+      // 👉 OCRだけ先に実行（分類用）
       const ocrResult = await ocrHandler({
         imageBuffer,
         event,
@@ -148,45 +122,19 @@ async function dispatcher(event) {
 
       const text = ocrResult?.text || "";
 
-      console.log("📄 OCR RESULT:", text);
-
       let route = ruleLayer(text);
 
-      if (route) {
-        return await dispatchToHandler({
-          route,
-          text,
-          imageBuffer,
-          event,
+      if (!route) {
+        logAICall("image fallback");
+
+        route = await dispatcherAI({
+          text: "",
+          ocr: text,
         });
       }
 
-      console.log("⏳ waiting for follow-up text...");
-
-      const waitedText = await waitForText(event);
-
-      if (waitedText) {
-        const r = ruleLayer(waitedText);
-
-        if (r) {
-          return await dispatchToHandler({
-            route: r,
-            text: waitedText,
-            imageBuffer,
-            event,
-          });
-        }
-      }
-
-      logAICall("image fallback");
-
-      const routeAI = await dispatcherAI({
-        text: waitedText || "",
-        ocr: text,
-      });
-
       return await dispatchToHandler({
-        route: routeAI,
+        route,
         text,
         imageBuffer,
         event,
@@ -194,32 +142,25 @@ async function dispatcher(event) {
     }
 
     // ==================================================
-    // 📝 TEXT FLOW
+    // 📝 TEXT
     // ==================================================
     if (type === "text") {
+
       const text = event.message.text;
 
-      console.log("📝 TEXT:", text);
+      let route = ruleLayer(text);
 
-      const route = ruleLayer(text);
+      if (!route) {
+        logAICall("text fallback");
 
-      if (route) {
-        return await dispatchToHandler({
-          route,
+        route = await dispatcherAI({
           text,
-          event,
+          ocr: "",
         });
       }
 
-      logAICall("text fallback");
-
-      const routeAI = await dispatcherAI({
-        text,
-        ocr: "",
-      });
-
       return await dispatchToHandler({
-        route: routeAI,
+        route,
         text,
         event,
       });
