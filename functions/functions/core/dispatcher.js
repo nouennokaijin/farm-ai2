@@ -28,7 +28,6 @@ const ocrHandler = require("../handlers/ocrHandler");
 const roomPersonaMap = {
   "1507420557266780323": "albedo",
   "1507547133790781540": "demiurge",
-  "1507837526453391370": "shalltear",
 };
 
 // ========================================

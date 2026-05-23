@@ -21,8 +21,6 @@ const groqService = require("../services/groqService");
 // ========================================
 const albedo = require("../personas/albedo");
 const demiurge = require("../personas/demiurge");
-const shalltear = require("../personas/shalltear");
-
 
 // ========================================
 // personaレジストリ（文字列→実体変換）
@@ -30,7 +28,6 @@ const shalltear = require("../personas/shalltear");
 const personaMap = {
   albedo,
   demiurge,
-  shalltear,
 };
 
 // ========================================

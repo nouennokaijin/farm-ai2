@@ -8,59 +8,69 @@
 const Groq = require("groq-sdk");
 
 const client = new Groq({
-  apiKey: process.env.GROQ_API_KEY
+	apiKey: process.env.GROQ_API_KEY,
 });
 
 // ========================================
 // chat
 // ========================================
+// system: システムプロンプト
+// user: ユーザーメッセージ
+// max_tokens: 応答トークン制御（任意）
+// ========================================
 async function chat({ system, user, max_tokens }) {
+	try {
+		console.log("=================================");
+		console.log("🧠 GROQ REQUEST START");
+		console.log("=================================");
 
-  try {
+		// ====================================
+		// max_tokens 制御（明示 if ロジック）
+		// トークンは正の整数で 1〜1200 の間のみ許可
+		// ====================================
+		let tokenLimit;
 
-    console.log("=================================");
-    console.log("🧠 GROQ REQUEST START");
-    console.log("=================================");
+		if (
+			typeof max_tokens === "number" &&
+			max_tokens > 0 &&
+			max_tokens <= 1200
+		) {
+			tokenLimit = max_tokens;
+		} else {
+			tokenLimit = 30; // デフォルト値
+		}
 
-    const res = await client.chat.completions.create({
+		const res = await client.chat.completions.create({
+			model: "meta-llama/llama-4-scout-17b-16e-instruct",
+			messages: [
+				{
+					role: "system",
+					content: system,
+				},
+				{
+					role: "user",
+					content: user,
+				},
+			],
 
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+			// ====================================
+			// TOKEN CONTROL（明示制御済み）
+			// ====================================
+			max_tokens: tokenLimit,
+		});
 
-      messages: [
-        {
-          role: "system",
-          content: system
-        },
-        {
-          role: "user",
-          content: user
-        }
-      ],
+		const text = res.choices?.[0]?.message?.content || "...";
 
-      temperature: 0.7,
+		console.log("✅ GROQ RESPONSE SUCCESS");
+		return text;
+	} catch (err) {
+		console.error("=================================");
+		console.error("❌ GROQ SERVICE ERROR");
+		console.error("=================================");
+		console.error(err);
 
-      // ====================================
-      // TOKEN CONTROL（chatHandlerから受け取る）
-      // ====================================
-      max_tokens: max_tokens || 170
-    });
-
-    const text =
-      res.choices?.[0]?.message?.content || "...";
-
-    console.log("✅ GROQ RESPONSE SUCCESS");
-
-    return text;
-
-  } catch (err) {
-
-    console.error("=================================");
-    console.error("❌ GROQ SERVICE ERROR");
-    console.error("=================================");
-    console.error(err);
-
-    return "通信エラーが発生しました。";
-  }
+		return "通信エラーが発生しました。";
+	}
 }
 
 module.exports = { chat };
