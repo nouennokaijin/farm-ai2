@@ -1,0 +1,23 @@
+{
+  "name": "farm-ai2",
+  "version": "1.0.0",
+  "main": "functions/index.js",
+  "scripts": {
+    "start": "node functions/index.js"
+  },
+  "dependencies": {
+    "@line/bot-sdk": "^11.0.0",
+    "axios": "^1.15.2",
+    "cloudinary": "^2.10.0",
+    "discord.js": "^14.26.4",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "firebase-admin": "^13.8.0",
+    "groq-sdk": "^1.1.2",
+    "sharp": "^0.34.5",
+    "tesseract.js": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
