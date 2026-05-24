@@ -6,10 +6,10 @@
 //   - dispatcherから渡されたpersonaIdを受け取る
 //   - personaデータを取得する
 //   - 雑談ムードを付与する
-//   - 会話履歴を共有管理する
+//   - 全人格共有の会話履歴を持つ
 //   - Groqへ渡して生成する
 // NOTE:
-//   全人格で会話履歴を共有する
+//   ここでは「判断しない」＝人格決定もしない
 // ========================================
 
 // ========================================
@@ -18,14 +18,14 @@
 const groqService = require("../services/groqService");
 
 // ========================================
-// 人格データ群
+// 人格データ群（追加していく場所）
 // ========================================
 const albedo = require("../personas/albedo");
 const demiurge = require("../personas/demiurge");
 const shalltear = require("../personas/shalltear");
 
 // ========================================
-// personaレジストリ
+// personaレジストリ（文字列→実体変換）
 // ========================================
 const personaMap = {
   albedo,
@@ -39,18 +39,17 @@ const personaMap = {
 const MAX_TOKENS = 80;
 
 // ========================================
-// 会話履歴
-// 全人格共有
+// 会話履歴（全人格共有）
 // ========================================
 const history = [];
 
 // ========================================
-// 最大保存件数
+// 最大履歴保存数
 // ========================================
 const MAX_HISTORY = 15;
 
 // ========================================
-// DEFAULT PERSONA
+// DEFAULT PERSONA（安全装置）
 // ========================================
 const defaultPersona = {
   name: "system",
@@ -66,6 +65,7 @@ const defaultPersona = {
 // CHAT HANDLER
 // ========================================
 async function chatHandler(event) {
+
   try {
 
     // ====================================
@@ -108,7 +108,7 @@ async function chatHandler(event) {
 
     // ====================================
     // ユーザー発言保存
-    // personaId無し = user
+    // personaIdなし = user
     // ====================================
     addHistory({
       content: text,
@@ -130,13 +130,22 @@ async function chatHandler(event) {
       });
 
     // ====================================
-    // messages生成
+    // 履歴文字列生成
     // ====================================
-    const messages = buildMessages({
-      systemPrompt,
-      history: recentHistory,
-      userMessage: text,
-    });
+    const historyText =
+      buildHistoryText(recentHistory);
+
+    // ====================================
+    // user入力へ履歴統合
+    // 元のgroqService受け渡し形式を維持
+    // ====================================
+    const userPrompt = `
+# RECENT HISTORY
+${historyText}
+
+# USER MESSAGE
+${text}
+`;
 
     // ====================================
     // ログ
@@ -145,36 +154,31 @@ async function chatHandler(event) {
     console.log("CHAT HANDLER START");
     console.log("PERSONA ID:", personaId);
     console.log("PERSONA:", persona.name);
+    console.log("MOOD:", mood.tone);
     console.log("TEXT:", text);
     console.log("HISTORY:", recentHistory.length);
     console.log("================================");
 
     // ====================================
     // Groqへ渡す
+    // 元のsystem/user構造を維持
     // ====================================
     const response =
       await groqService.chat({
 
-        messages,
+        system: systemPrompt,
+
+        user: userPrompt,
 
         max_tokens: MAX_TOKENS,
       });
 
     // ====================================
-    // AI返答取得
-    // ====================================
-    const aiReply =
-      typeof response === "string"
-        ? response
-        : response?.content || "・・・";
-
-    // ====================================
     // AI返答保存
-    // personaIdあり = AI
     // ====================================
     addHistory({
       personaId,
-      content: aiReply,
+      content: response,
     });
 
     // ====================================
@@ -182,11 +186,11 @@ async function chatHandler(event) {
     // ====================================
     if (event.reply) {
 
-      await event.reply(aiReply);
+      await event.reply(response);
 
     } else if (event.channel?.send) {
 
-      await event.channel.send(aiReply);
+      await event.channel.send(response);
     }
 
   } catch (err) {
@@ -206,6 +210,9 @@ function addHistory({
   personaId = null,
 }) {
 
+  // 空防止
+  if (!content) return;
+
   history.push({
 
     // ------------------------------
@@ -220,7 +227,7 @@ function addHistory({
     content,
 
     // ------------------------------
-    // 発言時間
+    // 時間
     // ------------------------------
     timestamp: Date.now(),
   });
@@ -243,67 +250,26 @@ function getRecentHistory(limit = 5) {
 }
 
 // ========================================
-// OpenAI/Groq messages生成
+// 履歴文字列生成
 // ========================================
-function buildMessages({
-  systemPrompt,
-  history,
-  userMessage,
-}) {
+function buildHistoryText(historyData) {
 
-  // ====================================
-  // 履歴整形
-  // ====================================
-  const formattedHistory =
-    history.map((msg) => {
+  return historyData.map((msg) => {
 
-      // ------------------------------
-      // AI発言
-      // ------------------------------
-      if (msg.personaId) {
+    // --------------------------------
+    // AI発言
+    // --------------------------------
+    if (msg.personaId) {
 
-        return {
-          role: "assistant",
-          content:
-            `[${msg.personaId.toUpperCase()}] ${msg.content}`,
-        };
-      }
+      return `[${msg.personaId.toUpperCase()}] ${msg.content}`;
+    }
 
-      // ------------------------------
-      // user発言
-      // ------------------------------
-      return {
-        role: "user",
-        content: msg.content,
-      };
-    });
+    // --------------------------------
+    // USER発言
+    // --------------------------------
+    return `[USER] ${msg.content}`;
 
-  // ====================================
-  // messages生成
-  // ====================================
-  return [
-
-    // ------------------------------
-    // system
-    // ------------------------------
-    {
-      role: "system",
-      content: systemPrompt,
-    },
-
-    // ------------------------------
-    // 履歴
-    // ------------------------------
-    ...formattedHistory,
-
-    // ------------------------------
-    // 最新入力
-    // ------------------------------
-    {
-      role: "user",
-      content: userMessage,
-    },
-  ];
+  }).join("\n");
 }
 
 // ========================================
@@ -316,21 +282,23 @@ function buildSystemPrompt({
 
   return `
 # PERSONA（使用人格）
-- Name: ${persona.name}
-- Tone: ${persona.personality?.tone}
-- Emotion: ${persona.personality?.emotion}
-- Style: ${persona.personality?.style}
+- Name: ${persona?.name || "Unknown"}
+- Tone: ${persona?.personality?.tone || "neutral"}
+- Emotion: ${persona?.personality?.emotion || "stable"}
+- Style: ${persona?.personality?.style || "basic"}
 
 # PERSONA CORE
-${persona.systemPrompt}
+${persona?.systemPrompt || "自然に会話してください"}
 
 # MOOD（雑談設定）
-- Mode: ${mood.mode}
-- Tone: ${mood.tone}
-- Flow: ${mood.flow}
+- Mode: ${mood?.mode || "chat"}
+- Tone: ${mood?.tone || "casual"}
+- Flow: ${mood?.flow || "natural"}
 
 # RULES
-${mood.rules.map(r => `- ${r}`).join("\n")}
+${(mood?.rules || [])
+  .map(r => `- ${r}`)
+  .join("\n")}
 
 # SHARED MEMORY
 - 会話履歴は全人格で共有されています
