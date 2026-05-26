@@ -1,31 +1,24 @@
 // ========================================
-// FILE: src/handlers/chatHandler.js
-// DATE: 2026-05-24
-// AUTHOR: OKIURA KAZUO
-// PURPOSE:
-//   - dispatcherから渡されたpersonaIdを受け取る
-//   - personaデータを取得する
-//   - 雑談ムードを付与する
-//   - 全人格共有の会話履歴を持つ
-//   - Groqへ渡して生成する
-// NOTE:
-//   ここでは「判断しない」＝人格決定もしない
+// PROJECT : farm-ai2
+// FILE    : farm-ai2/handlers/chatHandler.js
+// AUTHOR  : OKIURA KAZUO
+// DATE    : 2026-05-27
+// PURPOSE :
+//   - personaごとの個別履歴管理
+//   - 履歴の自動要約レイヤー
+//   - トークン爆発防止
+//   - ログと出力の完全分離
+//   - 長期運用向け安定化改善版
 // ========================================
 
-// ========================================
-// Groq Service（生成担当）
-// ========================================
 const groqService = require("../services/groqService");
 
-// ========================================
-// 人格データ群（追加していく場所）
-// ========================================
 const albedo = require("../personas/albedo");
 const demiurge = require("../personas/demiurge");
 const shalltear = require("../personas/shalltear");
 
 // ========================================
-// personaレジストリ（文字列→実体変換）
+// Persona Mapping
 // ========================================
 const personaMap = {
   albedo,
@@ -34,282 +27,353 @@ const personaMap = {
 };
 
 // ========================================
-// MAX TOKENS（出力制御）
+// Tuning Parameters
 // ========================================
 const MAX_TOKENS = 80;
+const MAX_HISTORY = 12;
+const MAX_SUMMARY = 6;
+const TRIGGER_HISTORY_SIZE = 6;
+const SUMMARY_SLICE_SIZE = 3;
 
 // ========================================
-// 会話履歴（全人格共有）
+// Logger
+// NOTE:
+//   生テキストをログへ出力しない。
+//   privacy保護のため内容保存禁止。
 // ========================================
-const history = [];
-
-// ========================================
-// 最大履歴保存数
-// ========================================
-const MAX_HISTORY = 15;
-
-// ========================================
-// DEFAULT PERSONA（安全装置）
-// ========================================
-const defaultPersona = {
-  name: "system",
-  systemPrompt: "あなたは自然で簡潔なAIです。",
-  personality: {
-    tone: "neutral",
-    emotion: "stable",
-    style: "basic",
-  },
+const logger = {
+  info: (...args) => console.log("[INFO]", ...args),
+  debug: (...args) => console.debug("[DEBUG]", ...args),
+  error: (...args) => console.error("[ERROR]", ...args),
 };
 
 // ========================================
-// CHAT HANDLER
+// Runtime Memory
+// NOTE:
+//   RAM上のみ保持。
+//   再起動時に消滅。
+// ========================================
+const histories = {};
+const summaries = {};
+
+// ========================================
+// Summarize Lock
+// NOTE:
+//   summarize多重実行防止。
+// ========================================
+const summarizingLock = {};
+
+// ========================================
+// Main Chat Handler
 // ========================================
 async function chatHandler(event) {
-
   try {
 
     // ====================================
-    // ユーザー入力取得
+    // Extract Input
     // ====================================
-    const text =
-      event.text?.trim() ||
-      event.content?.trim() ||
-      event.message?.content?.trim() ||
-      "";
+    const text = extractText(event);
 
     if (!text) return;
 
-    // ====================================
-    // 使用人格ID
-    // ====================================
-    const personaId =
-      event.personaId || "system";
+    const personaId = event.personaId || "system";
 
-    // ====================================
-    // 人格実体化
-    // ====================================
     const persona =
       personaMap[personaId] ||
-      defaultPersona;
+      personaMap.system || {
+        name: "system",
+        systemPrompt: "",
+      };
 
     // ====================================
-    // 雑談ムード
+    // SAFE LOGGING
+    // NOTE:
+    //   textはログ出力しない
     // ====================================
-    const mood = {
-      mode: "chat",
-      tone: "casual",
-      flow: "natural",
-      rules: [
-        "短すぎず自然に返答する",
-        "軽い感情を含める",
-        "会話の流れを優先する",
-      ],
-    };
+    logger.info("CHAT IN", {
+      personaId,
+    });
 
     // ====================================
-    // ユーザー発言保存
-    // personaIdなし = user
+    // Initialize Memory
     // ====================================
-    addHistory({
+    if (!histories[personaId]) {
+      histories[personaId] = [];
+    }
+
+    if (!summaries[personaId]) {
+      summaries[personaId] = [];
+    }
+
+    const history = histories[personaId];
+    const summary = summaries[personaId];
+
+    // ====================================
+    // Save User Message
+    // ====================================
+    push(history, {
+      role: "user",
       content: text,
     });
 
     // ====================================
-    // 最新履歴取得
+    // Summarize Trigger
     // ====================================
-    const recentHistory =
-      getRecentHistory(5);
+    if (
+      history.length > TRIGGER_HISTORY_SIZE &&
+      !summarizingLock[personaId]
+    ) {
 
-    // ====================================
-    // systemPrompt生成
-    // ====================================
-    const systemPrompt =
-      buildSystemPrompt({
-        persona,
-        mood,
+      summarizingLock[personaId] = true;
+
+      const oldMessages =
+        history.splice(0, SUMMARY_SLICE_SIZE);
+
+      logger.debug("SUMMARIZE TRIGGER", {
+        personaId,
       });
 
-    // ====================================
-    // 履歴文字列生成
-    // ====================================
-    const historyText =
-      buildHistoryText(recentHistory);
+      try {
+
+        const summaryText =
+          await summarize(oldMessages, personaId);
+
+        summary.push(summaryText);
+
+        // ==================================
+        // Summary Overflow Protection
+        // ==================================
+        if (summary.length > MAX_SUMMARY) {
+          summary.shift();
+        }
+
+      } finally {
+
+        summarizingLock[personaId] = false;
+      }
+    }
 
     // ====================================
-    // user入力へ履歴統合
-    // 元のgroqService受け渡し形式を維持
+    // Build Prompts
     // ====================================
-    const userPrompt = `
-# RECENT HISTORY
-${historyText}
+    const systemPrompt =
+      buildSystemPrompt(persona, summary);
 
-# USER MESSAGE
-${text}
-`;
+    const recent = history.slice(-5);
 
-    // ====================================
-    // ログ
-    // ====================================
-    console.log("================================");
-    console.log("CHAT HANDLER START");
-    console.log("PERSONA ID:", personaId);
-    console.log("PERSONA:", persona.name);
-    console.log("MOOD:", mood.tone);
-    console.log("TEXT:", text);
-    console.log("HISTORY:", recentHistory.length);
-    console.log("================================");
+    const userPrompt =
+      buildUserPrompt(summary, recent, text);
 
     // ====================================
-    // Groqへ渡す
-    // 元のsystem/user構造を維持
+    // LLM CALL
     // ====================================
-    const response =
+    logger.info("GROQ CALL START");
+
+    const responseRaw =
       await groqService.chat({
-
         system: systemPrompt,
-
         user: userPrompt,
-
         max_tokens: MAX_TOKENS,
       });
 
+    logger.info("GROQ CALL DONE");
+
     // ====================================
-    // AI返答保存
+    // Output Sanitize
     // ====================================
-    addHistory({
-      personaId,
+    const response = sanitize(responseRaw);
+
+    // ====================================
+    // Save Assistant Message
+    // ====================================
+    push(history, {
+      role: "assistant",
       content: response,
     });
 
     // ====================================
-    // 返信処理
+    // Reply
     // ====================================
-    if (event.reply) {
-
-      await event.reply(response);
-
-    } else if (event.channel?.send) {
-
-      await event.channel.send(response);
-    }
+    await safeReply(event, response);
 
   } catch (err) {
 
-    console.error(
-      "[chatHandler Fatal Error]",
-      err
+    logger.error("[chatHandler ERROR]", err);
+  }
+}
+
+// ========================================
+// Extract Text Safely
+// ========================================
+function extractText(event) {
+
+  return (
+    event.text?.trim() ||
+    event.content?.trim() ||
+    event.message?.content?.trim() ||
+    ""
+  );
+}
+
+// ========================================
+// Safe Reply
+// ========================================
+async function safeReply(event, text) {
+
+  const clean = sanitize(text);
+
+  if (!clean) return;
+
+  try {
+
+    if (event.reply) {
+      return await event.reply(clean);
+    }
+
+    if (event.channel?.send) {
+      return await event.channel.send(clean);
+    }
+
+  } catch (e) {
+
+    logger.error("safeReply failed", e);
+  }
+}
+
+// ========================================
+// Sanitize Output
+// NOTE:
+//   LLMノイズ除去
+// ========================================
+function sanitize(text) {
+
+  if (typeof text !== "string") {
+    return "";
+  }
+
+  return text
+
+    // ====================================
+    // LLM Internal Noise
+    // ====================================
+    .replace(/assistant<\|header_end\|>/g, "")
+    .replace(/\[user\].*?\n/g, "")
+    .replace(/\[assistant\].*?\n/g, "")
+
+    // ====================================
+    // Internal Logs
+    // ====================================
+    .replace(/GROQ REQUEST START/g, "")
+    .replace(/RAW RESPONSE:/g, "")
+    .replace(/DISPATCHER START/g, "")
+    .replace(/HEARTBEAT OK/g, "")
+
+    // ====================================
+    // Whitespace Cleanup
+    // ====================================
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+// ========================================
+// Summarize Old Messages
+// ========================================
+async function summarize(messages, personaId) {
+
+  const text = messages
+    .map(m => `[${m.role}] ${m.content}`)
+    .join("\n");
+
+  const result =
+    await groqService.chat({
+
+      system: `
+あなたは会話ログ圧縮器。
+人格・装飾は禁止。
+事実のみ抽出。
+`,
+
+      user: `
+[${personaId}] の会話を3〜5行で要約してください。
+
+${text}
+`,
+
+      max_tokens: 80,
+    });
+
+  return `[${personaId}] ${sanitize(result)}`;
+}
+
+// ========================================
+// Push History
+// NOTE:
+//   overflow防止付き
+// ========================================
+function push(arr, msg) {
+
+  arr.push({
+    ...msg,
+    timestamp: Date.now(),
+  });
+
+  if (arr.length > MAX_HISTORY) {
+
+    arr.splice(
+      0,
+      arr.length - MAX_HISTORY
     );
   }
 }
 
 // ========================================
-// 会話履歴追加
+// Build User Prompt
 // ========================================
-function addHistory({
-  content,
-  personaId = null,
-}) {
-
-  // 空防止
-  if (!content) return;
-
-  history.push({
-
-    // ------------------------------
-    // personaIdあり = AI
-    // personaIdなし = user
-    // ------------------------------
-    personaId,
-
-    // ------------------------------
-    // 発言内容
-    // ------------------------------
-    content,
-
-    // ------------------------------
-    // 時間
-    // ------------------------------
-    timestamp: Date.now(),
-  });
-
-  // ====================================
-  // 古い履歴削除
-  // ====================================
-  while (history.length > MAX_HISTORY) {
-
-    history.shift();
-  }
-}
-
-// ========================================
-// 最新履歴取得
-// ========================================
-function getRecentHistory(limit = 5) {
-
-  return history.slice(-limit);
-}
-
-// ========================================
-// 履歴文字列生成
-// ========================================
-function buildHistoryText(historyData) {
-
-  return historyData.map((msg) => {
-
-    // --------------------------------
-    // AI発言
-    // --------------------------------
-    if (msg.personaId) {
-
-      return `[${msg.personaId.toUpperCase()}] ${msg.content}`;
-    }
-
-    // --------------------------------
-    // USER発言
-    // --------------------------------
-    return `[USER] ${msg.content}`;
-
-  }).join("\n");
-}
-
-// ========================================
-// SYSTEM PROMPT生成
-// ========================================
-function buildSystemPrompt({
-  persona,
-  mood,
-}) {
+function buildUserPrompt(summary, recent, text) {
 
   return `
-# PERSONA（使用人格）
-- Name: ${persona?.name || "Unknown"}
-- Tone: ${persona?.personality?.tone || "neutral"}
-- Emotion: ${persona?.personality?.emotion || "stable"}
-- Style: ${persona?.personality?.style || "basic"}
+# MEMORY SUMMARY
+${summary.join("\n")}
 
-# PERSONA CORE
-${persona?.systemPrompt || "自然に会話してください"}
+# RECENT HISTORY
+${format(recent)}
 
-# MOOD（雑談設定）
-- Mode: ${mood?.mode || "chat"}
-- Tone: ${mood?.tone || "casual"}
-- Flow: ${mood?.flow || "natural"}
+# USER MESSAGE
+${text}
+`.trim();
+}
 
-# RULES
-${(mood?.rules || [])
-  .map(r => `- ${r}`)
-  .join("\n")}
+// ========================================
+// Build System Prompt
+// ========================================
+function buildSystemPrompt(persona, summary) {
 
-# SHARED MEMORY
-- 会話履歴は全人格で共有されています
-- 他人格との会話も認識してください
-- 誰が発言したか理解してください
-- 自然な流れで会話してください
+  return `
+# PERSONA
+${persona?.name || "system"}
+
+# CORE
+${persona?.systemPrompt || ""}
+
+# MEMORY SUMMARY
+${summary.join("\n")}
 
 # INSTRUCTION
-人格とムードを両方反映し、
-自然で一貫した会話を行うこと。
-`;
+人格として30文字程度で簡潔に応答せよ。
+出力は最終文のみ
+それ以外の出力を禁止する。
+補足・説明・修正案・注釈は禁止。
+`.trim();
+}
+
+// ========================================
+// Format History
+// ========================================
+function format(list) {
+
+  return list
+    .map(m => `[${m.role}] ${m.content}`)
+    .join("\n");
 }
 
 // ========================================
