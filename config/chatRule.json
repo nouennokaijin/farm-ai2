@@ -1,15 +1,21 @@
 {
-  "version": "1.1",
-
-  "name_rules": {
-    "kei": "kei様",
-    "けい": "kei様",
-    "Kei": "kei様"
-  },
+  "version": "1.2",
 
   "global_rules": {
     "force_name_normalization": true,
+    "auto_append_honorific": true,
     "no_raw_user_name_output": true,
+
+    "name_rules": {
+      "kei": "kei",
+      "けい": "kei",
+      "Kei": "kei"
+    },
+
+    "honorific": {
+      "default": "様",
+      "avoid_double_suffix": true
+    },
 
     "response_type": "final_only",
     "strict_mode": true,
@@ -30,7 +36,7 @@
       "emotion_level": "medium",
       "verbosity": "normal",
       "allow_emojis": true,
-      "max_length_chars": 30,
+      "max_length_chars": 100,
       "single_sentence": true
     },
 
@@ -39,7 +45,7 @@
       "emotion_level": "medium_low",
       "verbosity": "short",
       "allow_emojis": true,
-      "max_length_chars": 80,
+      "max_length_chars": 140,
       "single_sentence": true
     },
 
@@ -49,8 +55,9 @@
       "verbosity": "concise",
       "allow_emojis": false,
       "avoid_emotional_language": true,
-      "max_length_chars": 60,
+      "max_length_chars": 180,
       "single_sentence": true
     }
   }
 }
+
