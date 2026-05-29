@@ -24,7 +24,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   // ========================================
   const supabase = window.supabase.createClient(
     "https://stgaqwmdhnddqayqmedi.supabase.co",
- "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN0Z2Fxd21kaG5kZHFheXFtZWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTYzOTgsImV4cCI6MjA5NTYzMjM5OH0.KMvwGVyxSpbXJAyxsz5mCNkRU_M9jRB1VZZbvGzcL00"
+    "sb_publishable_cabU7_5aabCnGMdXAvitNw_VsX6JhKk"
   );
 
   // ========================================
