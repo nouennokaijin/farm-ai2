@@ -1,14 +1,15 @@
 // ========================================
 // index.js
-// 2026/05/18
+// 2026/05/29
 // 🚀 AI Multi Gateway Boot (Control Center)
 // Okiura Kazuo
 // ========================================
 //
 // 🎯 役割
 // ・Discord Gateway 起動管理
-// ・将来拡張の司令塔
-// ・処理は一切しない（起動専用）
+// ・Web / API サーバー起動（汎用）
+// ・将来拡張用の司令塔
+// ・処理ロジックは持たず「起動のみ」担当
 // ========================================
 
 const http = require("http");
@@ -20,6 +21,7 @@ console.log("=================================");
 // ========================================
 // 🧠 安全起動ラッパー
 // ========================================
+// モジュール起動失敗時でも全体停止しない
 function safeStart(name, path) {
   try {
     console.log("=================================");
@@ -40,24 +42,16 @@ function safeStart(name, path) {
 // ========================================
 // 🤖 Discord Gateway 起動
 // ========================================
+// Discord BOT 起動
 safeStart("Discord Gateway", "./index.discord.js");
 
 // ========================================
-// 🌐 Render対策用の最小HTTPサーバー
+// 🌐 ヘルスチェックサーバー
 // ========================================
-const PORT = process.env.PORT || 10000;
+// Render / Cloud 向け死活監視（現在は外部HTTPサーバー未使用）
+// ※ http.createServer は未使用化のため削除済み
 
-http
-  .createServer((req, res) => {
-    res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("AI Gateway is running\n");
-  })
-  .listen(PORT, () => {
-    console.log("=================================");
-    console.log("🌐 Health server running");
-    console.log(`PORT: ${PORT}`);
-    console.log("=================================");
-  });
+const PORT = process.env.PORT || 10000;
 
 // ========================================
 // 🎉 起動完了
@@ -67,9 +61,9 @@ console.log("🎉 ALL GATEWAYS READY");
 console.log("=================================");
 
 // ========================================
-// 💓 ヘルス監視（ログ用）
+// 💓 生存監視
 // ========================================
+// 1分ごとに稼働ログ出力
 setInterval(() => {
   console.log("💓 AI GATEWAY HEARTBEAT OK");
 }, 60000);
-
