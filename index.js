@@ -33,13 +33,13 @@ console.log("=================================");
 // 🧠 安全起動ラッパー
 // ========================================
 // モジュール起動失敗時でも全体停止しない設計
-function safeStart(name, path) {
+function safeStart(name, modulePath) {
   try {
     console.log("=================================");
     console.log(`🟡 Starting ${name}...`);
     console.log("=================================");
 
-    require(path);
+    require(modulePath);
 
     console.log(`✅ ${name} loaded successfully`);
   } catch (err) {
@@ -53,28 +53,26 @@ function safeStart(name, path) {
 // ========================================
 // 🤖 Discord Gateway 起動
 // ========================================
-// Discord BOT群の起動（Shalltear / Albedo etc）
 safeStart("Discord Gateway", "./index.discord.js");
 
 // ========================================
 // 📁 静的ファイル配信設定
 // ========================================
-// public/ フォルダをそのままWeb公開
-// → calendar.html やJS/CSSを配置する場所
-app.use(express.static("public"));
+// web フォルダ全体を静的配信（将来拡張用）
+app.use(express.json());
+app.use(express.static("web"));
 
 // ========================================
 // 📅 カレンダールート
 // ========================================
-// Webで /calendar にアクセスした時の表示
+// /calendar → web/calendar/index.html を返す
 app.get("/calendar", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/calendar.html"));
+  res.sendFile(path.join(__dirname, "web", "calendar", "index.html"));
 });
 
 // ========================================
 // ❤️ ヘルスチェック（重要）
 // ========================================
-// Render / 外部監視用
 app.get("/", (req, res) => {
   res.send("🟢 AI Gateway Alive");
 });
@@ -82,7 +80,6 @@ app.get("/", (req, res) => {
 // ========================================
 // 🔌 API拡張用プレースホルダー
 // ========================================
-// 将来 Supabase / Discord / Calendar API をここに追加可能
 app.get("/api/status", (req, res) => {
   res.json({
     status: "ok",
@@ -112,7 +109,6 @@ console.log("=================================");
 // ========================================
 // 💓 生存監視（Heartbeat）
 // ========================================
-// サーバーが落ちてないか確認するためのログ
 setInterval(() => {
   console.log("💓 AI GATEWAY HEARTBEAT OK");
 }, 60000);
