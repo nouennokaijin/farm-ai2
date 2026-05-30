@@ -12,7 +12,18 @@
 // ・処理ロジックは持たず「起動のみ」担当
 // ========================================
 
+// ========================================
+// 📦 必要モジュール
+// ========================================
 const http = require("http");
+const express = require("express");
+const path = require("path");
+
+// ========================================
+// 🌐 Web Server 初期化
+// ========================================
+const app = express();
+const PORT = process.env.PORT || 10000;
 
 console.log("=================================");
 console.log("🚀 AI GATEWAY START");
@@ -21,7 +32,7 @@ console.log("=================================");
 // ========================================
 // 🧠 安全起動ラッパー
 // ========================================
-// モジュール起動失敗時でも全体停止しない
+// モジュール起動失敗時でも全体停止しない設計
 function safeStart(name, path) {
   try {
     console.log("=================================");
@@ -42,28 +53,66 @@ function safeStart(name, path) {
 // ========================================
 // 🤖 Discord Gateway 起動
 // ========================================
-// Discord BOT 起動
+// Discord BOT群の起動（Shalltear / Albedo etc）
 safeStart("Discord Gateway", "./index.discord.js");
 
 // ========================================
-// 🌐 ヘルスチェックサーバー
+// 📁 静的ファイル配信設定
 // ========================================
-// Render / Cloud 向け死活監視（現在は外部HTTPサーバー未使用）
-// ※ http.createServer は未使用化のため削除済み
-
-const PORT = process.env.PORT || 10000;
+// public/ フォルダをそのままWeb公開
+// → calendar.html やJS/CSSを配置する場所
+app.use(express.static("public"));
 
 // ========================================
-// 🎉 起動完了
+// 📅 カレンダールート
+// ========================================
+// Webで /calendar にアクセスした時の表示
+app.get("/calendar", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/calendar.html"));
+});
+
+// ========================================
+// ❤️ ヘルスチェック（重要）
+// ========================================
+// Render / 外部監視用
+app.get("/", (req, res) => {
+  res.send("🟢 AI Gateway Alive");
+});
+
+// ========================================
+// 🔌 API拡張用プレースホルダー
+// ========================================
+// 将来 Supabase / Discord / Calendar API をここに追加可能
+app.get("/api/status", (req, res) => {
+  res.json({
+    status: "ok",
+    service: "AI Gateway",
+    time: new Date().toISOString(),
+  });
+});
+
+// ========================================
+// 🚀 Web Server 起動
+// ========================================
+app.listen(PORT, () => {
+  console.log("=================================");
+  console.log(`🌐 Web Server running on port ${PORT}`);
+  console.log(`📅 Calendar: /calendar`);
+  console.log(`❤️ Health: /`);
+  console.log("=================================");
+});
+
+// ========================================
+// 🎉 起動完了ログ
 // ========================================
 console.log("=================================");
 console.log("🎉 ALL GATEWAYS READY");
 console.log("=================================");
 
 // ========================================
-// 💓 生存監視
+// 💓 生存監視（Heartbeat）
 // ========================================
-// 1分ごとに稼働ログ出力
+// サーバーが落ちてないか確認するためのログ
 setInterval(() => {
   console.log("💓 AI GATEWAY HEARTBEAT OK");
 }, 60000);
