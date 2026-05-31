@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📚 Nazarick Library</title>
+
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #1e1e1e;
+      color: #ffffff;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      color: gold;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: auto;
+    }
+
+    .card {
+      background: #2a2a2a;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 10px;
+    }
+
+    label {
+      display: block;
+      margin-top: 10px;
+      margin-bottom: 5px;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      padding: 10px;
+      box-sizing: border-box;
+      border-radius: 5px;
+      border: none;
+    }
+
+    textarea {
+      min-height: 150px;
+      resize: vertical;
+    }
+
+    button {
+      margin-top: 15px;
+      padding: 10px 20px;
+      background: gold;
+      color: black;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    .entry {
+      border-left: 4px solid gold;
+      padding-left: 10px;
+      margin-bottom: 15px;
+    }
+
+    .tags {
+      color: #87cefa;
+      font-size: 0.9em;
+    }
+
+    .meta {
+      color: #aaaaaa;
+      font-size: 0.8em;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <h1>📚 Nazarick Library</h1>
+
+  <!-- 検索 -->
+  <div class="card">
+    <h2>🔍 資料検索</h2>
+
+    <input
+      type="text"
+      id="searchInput"
+      placeholder="タイトル・タグ・本文を検索">
+
+    <button id="searchBtn">
+      検索
+    </button>
+  </div>
+
+  <!-- 新規登録 -->
+  <div class="card">
+    <h2>➕ 新規登録</h2>
+
+    <label>タイトル</label>
+    <input type="text" id="title">
+
+    <label>要約</label>
+    <textarea id="summary"></textarea>
+
+    <label>本文</label>
+    <textarea id="content"></textarea>
+
+    <label>タグ（カンマ区切り）</label>
+    <input
+      type="text"
+      id="tags"
+      placeholder="英検,学習,語彙">
+
+    <label>種別</label>
+    <select id="type">
+      <option value="memo">memo</option>
+      <option value="url">url</option>
+      <option value="document">document</option>
+      <option value="meeting_brief">meeting_brief</option>
+      <option value="meeting_result">meeting_result</option>
+    </select>
+
+    <label>登録者</label>
+    <input
+      type="text"
+      id="author"
+      value="kei">
+
+    <label>重要度</label>
+    <select id="importance">
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="3" selected>3</option>
+      <option value="4">4</option>
+      <option value="5">5</option>
+    </select>
+
+    <button id="saveBtn">
+      📚 登録
+    </button>
+  </div>
+
+  <!-- 一覧 -->
+  <div class="card">
+    <h2>📖 登録資料一覧</h2>
+
+    <div id="libraryList">
+
+      <!-- 動的生成 -->
+
+      <div class="entry">
+        <h3>英検1級学習計画</h3>
+
+        <div class="tags">
+          #英検 #学習 #語彙
+        </div>
+
+        <p>
+          語彙学習を優先する。
+        </p>
+
+        <div class="meta">
+          作成者: kei |
+          重要度: 5
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+
+  // 今後 app.js に移動
+
+  document
+    .getElementById("saveBtn")
+    .addEventListener("click", () => {
+
+      alert("登録処理は次回実装");
+
+    });
+
+  document
+    .getElementById("searchBtn")
+    .addEventListener("click", () => {
+
+      alert("検索処理は次回実装");
+
+    });
+
+</script>
+
+</body>
+</html>
