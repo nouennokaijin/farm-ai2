@@ -1,17 +1,26 @@
 // ========================================
-// PROJECT        : farm-ai2
-// FILE           : handlers/chatHandler.js
-// DATE           : 2026-05-28
-// AUTHOR         : OKIURA KAZUO
-// PURPOSE        :
-//   - ルール適用＋人格チャットエンジン
-//   - Notion長期記憶
-//   - AI検索エージェント
+// 📁 FOLDER : handlers
+// 📄 FILE : chatHandler.js
+// 📅 DATE : 2026-05-31
+// 👤 AUTHOR : OKIURA KAZUO
+// ========================================
+//
+// 🧠 SUMMARY
+// chatHandler（人格 + 会話エンジン）
+//
+// ・会話生成
+// ・Notion長期記憶
+// ・webGateによる検索制御（重要）
+// ・searchAdapterには直接触れない
+//
+// 🎯 設計思想
+// chatHandlerは“考えるだけ”
+// 外部検索判断はすべてwebGateに委譲
+//
 // ========================================
 
 const fs = require("fs");
 const path = require("path");
-const axios = require("axios");
 
 const groqService = require("../services/groqService");
 
@@ -20,6 +29,10 @@ const { saveMsgToNotion } =
 
 const { buildTags } =
   require("../utils/tagger");
+
+// 🚪 重要：webGateのみ接続（searchAdapterは見ない）
+const { webGate } =
+  require("../utils/webGate");
 
 // ========================================
 // Personas
@@ -45,10 +58,7 @@ const personaMap = {
   albedo,
   demiurge,
   shalltear,
-  system: {
-    name: "system",
-    systemPrompt: ""
-  }
+  system: { name: "system", systemPrompt: "" }
 };
 
 // ========================================
@@ -68,6 +78,7 @@ const TRIGGER_HISTORY_SIZE = 6;
 const SUMMARY_SLICE_SIZE = 3;
 const MAX_TOKENS = 120;
 
+
 // ========================================
 // MAIN
 // ========================================
@@ -75,29 +86,21 @@ async function chatHandler(event) {
   try {
 
     const text = extractText(event);
-
     if (!text) return;
 
-    const personaId =
-      event.personaId || "system";
+    const personaId = event.personaId || "system";
+    const mode = event.mode || "chat";
 
-    const mode =
-      event.mode || "chat";
-
-    const persona =
-      personaMap[personaId];
+    const persona = personaMap[personaId];
 
     histories[personaId] ??= [];
     summaries[personaId] ??= [];
 
-    const history =
-      histories[personaId];
-
-    const summary =
-      summaries[personaId];
+    const history = histories[personaId];
+    const summary = summaries[personaId];
 
     // ====================================
-    // 初回のみNotion記憶ロード
+    // Notion初回ロード
     // ====================================
     if (!loadedMemory[personaId]) {
 
@@ -112,7 +115,7 @@ async function chatHandler(event) {
     }
 
     // ====================================
-    // 名前ルール
+    // 入力処理
     // ====================================
     const normalizedText =
       applyNameRules(text, rules);
@@ -123,13 +126,19 @@ async function chatHandler(event) {
     });
 
     // ====================================
-    // AI検索判定
+    // 🚪 WEB GATE（ここが唯一の検索判断点）
     // ====================================
+
+    const webContext = await webGate(normalizedText, {
+      history,
+      summary
+    });
+
     const webResult =
-      await maybeWebSearch(normalizedText);
+      formatWebResult(webContext);
 
     // ====================================
-    // 要約
+    // 要約処理
     // ====================================
     if (
       history.length > TRIGGER_HISTORY_SIZE &&
@@ -138,24 +147,17 @@ async function chatHandler(event) {
 
       summarizingLock[personaId] = true;
 
-      const old =
-        history.splice(0, SUMMARY_SLICE_SIZE);
+      const old = history.splice(0, SUMMARY_SLICE_SIZE);
 
       try {
 
-        const s =
-          await summarize(old, personaId);
-
+        const s = await summarize(old, personaId);
         summary.push(s);
 
-        // ================================
-        // Notion保存
-        // ================================
-        const tags =
-          await buildTags({
-            text: s,
-            type: "チャット"
-          });
+        const tags = await buildTags({
+          text: s,
+          type: "チャット"
+        });
 
         await saveMsgToNotion({
           title: `${personaId} memory`,
@@ -169,7 +171,6 @@ async function chatHandler(event) {
         }
 
       } finally {
-
         summarizingLock[personaId] = false;
       }
     }
@@ -178,22 +179,16 @@ async function chatHandler(event) {
     // Prompt
     // ====================================
     const systemPrompt =
-      buildSystemPrompt(
-        persona,
-        summary,
-        mode
-      );
+      buildSystemPrompt(persona, summary, mode);
 
-    const recent =
-      history.slice(-5);
+    const recent = history.slice(-5);
 
-    const userPrompt =
-      buildUserPrompt({
-        summary,
-        recent,
-        text: normalizedText,
-        webResult
-      });
+    const userPrompt = buildUserPrompt({
+      summary,
+      recent,
+      text: normalizedText,
+      webResult
+    });
 
     // ====================================
     // AI
@@ -210,165 +205,46 @@ async function chatHandler(event) {
       content: responseRaw
     });
 
-    await safeReply(
-      event,
-      responseRaw
-    );
+    await safeReply(event, responseRaw);
 
   } catch (err) {
-
-    console.error(
-      "[ERROR] chatHandler",
-      err
-    );
+    console.error("[ERROR] chatHandler", err);
   }
 }
 
+
 // ========================================
-// AI Web Search Judge
+// 🌐 webGate結果フォーマット
 // ========================================
-async function maybeWebSearch(text) {
 
-  try {
+function formatWebResult(webContext) {
 
-    const judge =
-      await groqService.chat({
-        system: `
-検索が必要か YES / NO のみ返答。
-最新情報・ニュース・価格・発売日
-時事・Web情報なら YES。
-`,
-        user: text,
-        max_tokens: 5
-      });
+  if (!webContext) return "none";
 
-    if (!judge.includes("YES")) {
-      return "";
-    }
+  return `
+# WEB SEARCH
+searched: ${webContext.searched}
+score: ${webContext.score}
+reason: ${webContext.reason}
 
-    // ====================================
-    // Tavily例
-    // ====================================
-    const res = await axios.post(
-      "https://api.tavily.com/search",
-      {
-        api_key: process.env.TAVILY_API_KEY,
-        query: text,
-        max_results: 3
-      }
-    );
-
-    const results =
-      res.data.results || [];
-
-    return results
+${webContext.data?.results
+  ? webContext.data.results
       .map(r =>
-        `${r.title}\n${r.content}`
+        `🔹 ${r.title}\n${r.snippet}\n${r.url}`
       )
       .join("\n\n")
-      .slice(0, 1200);
-
-  } catch (err) {
-
-    console.error(
-      "web search error",
-      err.message
-    );
-
-    return "";
-  }
+  : "no results"}
+`.trim();
 }
 
-// ========================================
-// Notion Memory Load
-// ========================================
-async function loadNotionMemory(query) {
-
-  try {
-
-    const res = await axios.post(
-      `https://api.notion.com/v1/databases/${process.env.NOTION_DATABASE_ID}/query`,
-      {
-        page_size: 5
-      },
-      {
-        headers: {
-          Authorization:
-            `Bearer ${process.env.NOTION_API_KEY}`,
-
-          "Notion-Version":
-            "2022-06-28",
-
-          "Content-Type":
-            "application/json"
-        }
-      }
-    );
-
-    const results =
-      res.data.results || [];
-
-    return results.map(page => {
-
-      const txt =
-        page.properties?.AI?.rich_text?.[0]
-          ?.plain_text || "";
-
-      return txt;
-
-    }).filter(Boolean);
-
-  } catch (err) {
-
-    console.error(
-      "notion load error",
-      err.message
-    );
-
-    return [];
-  }
-}
 
 // ========================================
-// Name Rules
+// 🔧 以下は元のまま
 // ========================================
-function applyNameRules(text, rules) {
 
-  const g =
-    rules.global_rules || {};
-
-  const nameRules =
-    rules.name_rules || {};
-
-  const honorific =
-    g.honorific || {
-      default: ""
-    };
-
-  const normalized =
-    nameRules[text] || text;
-
-  if (g.auto_append_honorific) {
-
-    return (
-      normalized +
-      honorific.default
-    );
-  }
-
-  return normalized;
-}
-
-// ========================================
-// Extract Text
-// ========================================
 function extractText(event) {
-
   if (!event) return "";
-
-  if (typeof event === "string") {
-    return event;
-  }
+  if (typeof event === "string") return event;
 
   return (
     event.content ||
@@ -379,21 +255,24 @@ function extractText(event) {
   );
 }
 
-// ========================================
-// System Prompt
-// ========================================
-function buildSystemPrompt(
-  persona,
-  summary,
-  mode
-) {
+function applyNameRules(text, rules) {
 
-  const modeRule =
-    rules.modes?.[mode] ||
-    rules.modes.chat;
+  const g = rules.global_rules || {};
+  const nameRules = rules.name_rules || {};
+  const honorific = g.honorific || { default: "" };
 
-  const instruction =
-    rules.global_rules || {};
+  const normalized = nameRules[text] || text;
+
+  if (g.auto_append_honorific) {
+    return normalized + honorific.default;
+  }
+
+  return normalized;
+}
+
+function buildSystemPrompt(persona, summary, mode) {
+
+  const modeRule = rules.modes?.[mode] || rules.modes.chat;
 
   return `
 # PERSONA
@@ -407,13 +286,9 @@ ${summary.join("\n")}
 
 # RULES
 max_chars=${modeRule.max_length_chars || 80}
-final_only=${instruction.response_type}
 `.trim();
 }
 
-// ========================================
-// User Prompt
-// ========================================
 function buildUserPrompt({
   summary,
   recent,
@@ -422,7 +297,7 @@ function buildUserPrompt({
 }) {
 
   return `
-# MEMORY SUMMARY
+# MEMORY
 ${summary.join("\n")}
 
 # RECENT
@@ -436,80 +311,73 @@ ${text}
 `.trim();
 }
 
-// ========================================
-// Summarize
-// ========================================
-async function summarize(
-  messages,
-  personaId
-) {
+async function summarize(messages, personaId) {
 
   const text = messages
-    .map(m =>
-      `[${m.role}] ${m.content}`
-    )
+    .map(m => `[${m.role}] ${m.content}`)
     .join("\n");
 
-  const result =
-    await groqService.chat({
-      system:
-        "会話を3〜5行で要約。事実のみ。",
-      user:
-        `[${personaId}] ${text}`,
-      max_tokens: 80
-    });
+  const result = await groqService.chat({
+    system: "会話を3〜5行で要約。事実のみ。",
+    user: `[${personaId}] ${text}`,
+    max_tokens: 80
+  });
 
   return `[${personaId}] ${result}`;
 }
 
-// ========================================
-// Reply
-// ========================================
+async function loadNotionMemory(query) {
+
+  try {
+
+    const axios = require("axios");
+
+    const res = await axios.post(
+      `https://api.notion.com/v1/databases/${process.env.NOTION_DATABASE_ID}/query`,
+      { page_size: 5 },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.NOTION_API_KEY}`,
+          "Notion-Version": "2022-06-28",
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    return (res.data.results || [])
+      .map(page =>
+        page.properties?.AI?.rich_text?.[0]?.plain_text || ""
+      )
+      .filter(Boolean);
+
+  } catch (err) {
+    console.error("notion load error", err.message);
+    return [];
+  }
+}
+
 async function safeReply(event, text) {
 
   if (!text) return;
 
-  if (event.reply) {
-    return await event.reply(text);
-  }
-
-  if (event.channel?.send) {
-    return await event.channel.send(text);
-  }
+  if (event.reply) return await event.reply(text);
+  if (event.channel?.send) return await event.channel.send(text);
 }
 
-// ========================================
-// History Push
-// ========================================
 function push(arr, msg) {
 
-  arr.push({
-    ...msg,
-    timestamp: Date.now()
-  });
+  arr.push({ ...msg, timestamp: Date.now() });
 
   if (arr.length > MAX_HISTORY) {
-
-    arr.splice(
-      0,
-      arr.length - MAX_HISTORY
-    );
+    arr.splice(0, arr.length - MAX_HISTORY);
   }
 }
 
-// ========================================
-// Format
-// ========================================
 function format(list) {
 
   return list
-    .map(m =>
-      `[${m.role}] ${m.content}`
-    )
+    .map(m => `[${m.role}] ${m.content}`)
     .join("\n");
 }
 
-// ========================================
-// Export
-// ========================================
 module.exports = chatHandler;
