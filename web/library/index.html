@@ -5,91 +5,180 @@
 <title>ナザリック知識庫</title>
 
 <style>
-body {
+html, body {
     margin: 0;
+    padding: 0;
+    height: 100%;
     font-family: Arial, sans-serif;
-    background: #0b0f1a;
+    background: #111827;
     color: #e6e6e6;
-    height: 100vh;
-    overflow: hidden; /* ← 全体スクロール禁止 */
 }
 
-/* ===== TOP BAR ===== */
+/* ===== TOP ===== */
 .topbar {
     height: 50px;
-    background: #111827;
-    padding: 10px 15px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    background: #0f172a;
     border-bottom: 1px solid #2c2f3a;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 100;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    padding: 0 15px;
 }
 
 .logo {
+    color: #a5b4fc;
     font-weight: bold;
-    color: #9ca3ff;
-    letter-spacing: 1px;
 }
 
-.top-actions button {
-    margin-left: 8px;
+/* search */
+.search {
+    width: 300px;
     background: #1f2937;
-    border: 1px solid #374151;
+    border: 1px solid #2c2f3a;
     color: white;
-    padding: 5px 10px;
-    cursor: pointer;
+    padding: 5px 8px;
+    border-radius: 4px;
 }
 
-/* ===== LEFT SIDEBAR ===== */
+/* ===== LAYOUT ===== */
+.wrapper {
+    display: flex;
+    height: calc(100vh - 50px);
+}
+
+/* LEFT */
 .sidebar {
     width: 220px;
-    background: #0f172a;
+    background: #0b0f1a;
     border-right: 1px solid #2c2f3a;
-
-    position: fixed;
-    top: 50px;
-    left: 0;
-    bottom: 0;
 
     padding: 10px;
     overflow-y: auto;
 }
 
-.sidebar h3 {
-    font-size: 14px;
-    color: #9ca3ff;
-    margin-bottom: 10px;
-}
-
-.menu-item {
+.menu {
     padding: 8px;
-    cursor: pointer;
-    border-radius: 5px;
+    border-radius: 4px;
 }
 
-.menu-item:hover {
+.menu:hover {
     background: #1f2937;
 }
 
-/* ===== CONTENT AREA ===== */
+/* CENTER */
 .content {
-    position: fixed;
-    top: 50px;
-    left: 220px;
-    right: 0;
-    bottom: 0;
+    flex: 1;
+    padding: 15px;
 
-    padding: 20px;
-    overflow-y: auto; /* ← ここだけスクロール */
+    overflow-y: auto;
 }
 
-/* TAB BAR */
+/* TAB */
 .tabs {
     display: flex;
-    border-bottom: 1px solid #2c2f
+    margin-bottom: 10px;
+}
+
+.tab {
+    background: #1f2937;
+    padding: 6px 10px;
+    margin-right: 5px;
+    border-radius: 4px;
+}
+
+/* INFO BOX */
+.infobox {
+    float: right;
+    width: 220px;
+    background: #0f172a;
+    border: 1px solid #2c2f3a;
+    padding: 10px;
+    margin-left: 10px;
+}
+
+/* SECTION */
+.section {
+    margin-bottom: 20px;
+}
+
+.section h2 {
+    border-left: 3px solid #6366f1;
+    padding-left: 8px;
+}
+
+/* CLEAR FLOAT */
+.clear {
+    clear: both;
+}
+</style>
+</head>
+
+<body>
+
+<!-- TOP -->
+<div class="topbar">
+    <div class="logo">🗂 ナザリック知識庫</div>
+
+    <input class="search" placeholder="Search...">
+
+    <div>
+        <button>Sign in</button>
+        <button>History</button>
+    </div>
+</div>
+
+<!-- BODY -->
+<div class="wrapper">
+
+    <!-- LEFT -->
+    <div class="sidebar">
+        <div class="menu">Main</div>
+        <div class="menu">Characters</div>
+        <div class="menu">Items</div>
+        <div class="menu">World</div>
+        <div class="menu">Library</div>
+    </div>
+
+    <!-- CENTER -->
+    <div class="content">
+
+        <div class="tabs">
+            <div class="tab">Article</div>
+            <div class="tab">Talk</div>
+            <div class="tab">Edit</div>
+            <div class="tab">History</div>
+        </div>
+
+        <div class="infobox">
+            <b>Data</b><br>
+            Race: Unknown<br>
+            Role: Librarian<br>
+            Affiliation: Nazarick
+        </div>
+
+        <div class="section">
+            <h2>Overview</h2>
+            <p>ちゃんと表示されるテスト文章</p>
+        </div>
+
+        <div class="section">
+            <h2>Appearance</h2>
+            <p>ここも表示される</p>
+        </div>
+
+        <div class="section">
+            <h2>Abilities</h2>
+            <p>ここも表示される</p>
+        </div>
+
+        <div class="clear"></div>
+
+    </div>
+
+</div>
+
+</body>
+</html>
 
