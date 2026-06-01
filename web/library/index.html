@@ -2,238 +2,236 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Nazarick Library OS</title>
+<title>ナザリック知識庫</title>
 
 <style>
 body {
-  margin: 0;
-  font-family: sans-serif;
-  display: flex;
-  height: 100vh;
-  background: #0f0f14;
-  color: #e6e6e6;
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #0b0f1a;
+    color: #e6e6e6;
 }
 
-/* 左メニュー */
-#left {
-  width: 200px;
-  background: #151522;
-  padding: 10px;
-  box-sizing: border-box;
+/* ===== TOP BAR ===== */
+.topbar {
+    background: #111827;
+    padding: 10px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #2c2f3a;
 }
 
-.menu-btn {
-  width: 100%;
-  padding: 10px;
-  margin-bottom: 8px;
-  background: #222236;
-  border: none;
-  color: white;
-  cursor: pointer;
-  border-radius: 6px;
+.logo {
+    font-weight: bold;
+    color: #9ca3ff;
+    letter-spacing: 1px;
 }
 
-/* 中央 */
-#center {
-  flex: 1;
-  padding: 20px;
-  overflow-y: auto;
+.top-actions button {
+    margin-left: 8px;
+    background: #1f2937;
+    border: 1px solid #374151;
+    color: white;
+    padding: 5px 10px;
+    cursor: pointer;
 }
 
-/* 右 */
-#right {
-  width: 260px;
-  background: #1a1a28;
-  padding: 10px;
-  box-sizing: border-box;
-  border-left: 1px solid #333;
+/* ===== LAYOUT ===== */
+.container {
+    display: flex;
 }
 
-/* カード */
-.card {
-  background: #222236;
-  padding: 10px;
-  margin: 10px 0;
-  border-radius: 8px;
-  cursor: pointer;
+/* LEFT MENU */
+.sidebar {
+    width: 220px;
+    background: #0f172a;
+    border-right: 1px solid #2c2f3a;
+    height: calc(100vh - 50px);
+    padding: 10px;
 }
 
-input, textarea {
-  width: 100%;
-  padding: 8px;
-  margin: 5px 0;
-  background: #111;
-  color: white;
-  border: 1px solid #333;
-  border-radius: 6px;
+.sidebar h3 {
+    font-size: 14px;
+    color: #9ca3ff;
+    margin-bottom: 10px;
 }
 
-button.save {
-  width: 100%;
-  padding: 10px;
-  background: #4b4bff;
-  border: none;
-  color: white;
-  border-radius: 6px;
-  cursor: pointer;
+.menu-item {
+    padding: 8px;
+    cursor: pointer;
+    border-radius: 5px;
 }
 
-.tag {
-  font-size: 12px;
-  color: #aaa;
+.menu-item:hover {
+    background: #1f2937;
 }
+
+/* CENTER CONTENT */
+.content {
+    flex: 1;
+    padding: 20px;
+}
+
+/* TAB BAR */
+.tabs {
+    display: flex;
+    border-bottom: 1px solid #2c2f3a;
+    margin-bottom: 15px;
+}
+
+.tab {
+    padding: 8px 12px;
+    cursor: pointer;
+    background: #111827;
+    margin-right: 5px;
+    border-radius: 5px 5px 0 0;
+}
+
+.tab.active {
+    background: #1f2937;
+    color: #a5b4fc;
+}
+
+/* INFO BOX */
+.infobox {
+    float: right;
+    width: 250px;
+    background: #111827;
+    border: 1px solid #2c2f3a;
+    padding: 10px;
+    margin-left: 15px;
+}
+
+.infobox h4 {
+    margin-top: 0;
+    color: #a5b4fc;
+}
+
+.info-row {
+    font-size: 13px;
+    margin-bottom: 6px;
+    border-bottom: 1px dotted #2c2f3a;
+    padding-bottom: 4px;
+}
+
+/* SECTION */
+.section {
+    margin-bottom: 20px;
+}
+
+.section h2 {
+    border-left: 4px solid #6366f1;
+    padding-left: 10px;
+}
+
+/* EDIT BAR */
+.editbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.editbar button {
+    background: #1f2937;
+    border: 1px solid #374151;
+    color: white;
+    padding: 5px 8px;
+    cursor: pointer;
+}
+
+/* FOOTER */
+.footer {
+    text-align: center;
+    padding: 10px;
+    font-size: 12px;
+    color: #6b7280;
+    border-top: 1px solid #2c2f3a;
+}
+
 </style>
 </head>
 
 <body>
 
-<!-- 左 -->
-<div id="left">
-  <button class="menu-btn" onclick="setMode('search')">🔍 Search</button>
-  <button class="menu-btn" onclick="setMode('record')">📚 Record</button>
-</div>
-
-<!-- 中央 -->
-<div id="center">
-  ナザリック図書館OS 起動待機中...
-</div>
-
-<!-- 右 -->
-<div id="right">
-  <h3>Detail</h3>
-  <div id="detail">未選択</div>
-</div>
-
-<script>
-
-// ============================
-// 🧠 ナザリックDB（簡易ローカル）
-// ============================
-let DB = JSON.parse(localStorage.getItem("nazarick_db") || "[]");
-
-let mode = "none";
-
-// ============================
-// モード切替
-// ============================
-function setMode(m){
-  mode = m;
-
-  if(m === "search") renderSearch();
-  if(m === "record") renderRecord();
-}
-
-// ============================
-// 検索AI（ダミー推論）
-// ============================
-function aiSearch(query){
-  if(!query) return [];
-
-  return DB.filter(d =>
-    d.title.includes(query) ||
-    d.content.includes(query) ||
-    d.tags.some(t => query.includes(t))
-  );
-}
-
-// ============================
-// タグAI（超簡易疑似AI）
-// ============================
-function aiTag(text){
-  let tags = [];
-
-  if(text.includes("魔法")) tags.push("magic");
-  if(text.includes("炎")) tags.push("fire");
-  if(text.includes("本")) tags.push("library");
-  if(text.includes("研究")) tags.push("research");
-
-  if(tags.length === 0) tags.push("misc");
-
-  return tags;
-}
-
-// ============================
-// レコード追加AI補助
-// ============================
-function saveRecord(){
-  let title = document.getElementById("title").value;
-  let content = document.getElementById("content").value;
-
-  let tags = aiTag(content);
-
-  let data = {
-    id: Date.now(),
-    title,
-    content,
-    tags,
-    created: new Date().toISOString()
-  };
-
-  DB.push(data);
-  localStorage.setItem("nazarick_db", JSON.stringify(DB));
-
-  alert("ナザリックに記録された");
-
-  renderRecord();
-}
-
-// ============================
-// 検索画面
-// ============================
-function renderSearch(){
-  document.getElementById("center").innerHTML = `
-    <h2>🔍 Search Mode</h2>
-    <input id="searchBox" placeholder="曖昧検索OK（例：炎の魔法）">
-    <button onclick="doSearch()">検索</button>
-    <div id="results"></div>
-  `;
-}
-
-function doSearch(){
-  let q = document.getElementById("searchBox").value;
-  let res = aiSearch(q);
-
-  let html = res.map(r => `
-    <div class="card" onclick="showDetail(${r.id})">
-      <b>${r.title}</b><br>
-      <div class="tag">${r.tags.join(", ")}</div>
+<!-- TOP BAR -->
+<div class="topbar">
+    <div class="logo">🗂 ナザリック知識庫</div>
+    <div class="top-actions">
+        <button>Sign in</button>
+        <button>Watch</button>
+        <button>History</button>
+        <button>More</button>
     </div>
-  `).join("");
+</div>
 
-  document.getElementById("results").innerHTML =
-    html || "該当なし";
-}
+<div class="container">
 
-// ============================
-// 記録画面
-// ============================
-function renderRecord(){
-  document.getElementById("center").innerHTML = `
-    <h2>📚 Record Mode</h2>
+    <!-- LEFT MENU -->
+    <div class="sidebar">
+        <h3>Navigation</h3>
+        <div class="menu-item">Main</div>
+        <div class="menu-item">Characters</div>
+        <div class="menu-item">Items</div>
+        <div class="menu-item">World</div>
+        <div class="menu-item">Library</div>
+    </div>
 
-    <input id="title" placeholder="タイトル">
-    <textarea id="content" rows="8" placeholder="ここに記録..."></textarea>
+    <!-- CONTENT -->
+    <div class="content">
 
-    <button class="save" onclick="saveRecord()">
-      🧠 記憶に刻む
-    </button>
-  `;
-}
+        <!-- TAB -->
+        <div class="tabs">
+            <div class="tab active">Article</div>
+            <div class="tab">Talk</div>
+            <div class="tab">Edit</div>
+            <div class="tab">History</div>
+        </div>
 
-// ============================
-// 詳細表示
-// ============================
-function showDetail(id){
-  let item = DB.find(d => d.id === id);
+        <!-- EDIT BAR -->
+        <div class="editbar">
+            <button>Edit source</button>
+            <button>Purge</button>
+            <button>Add section</button>
+        </div>
 
-  document.getElementById("detail").innerHTML = `
-    <b>${item.title}</b><br><br>
-    ${item.content}<br><br>
-    <div class="tag">tags: ${item.tags.join(", ")}</div>
-  `;
-}
+        <!-- INFBOX -->
+        <div class="infobox">
+            <h4>Personal Data</h4>
+            <div class="info-row">Race: Unknown</div>
+            <div class="info-row">Affiliation: Nazarick</div>
+            <div class="info-row">Role: Librarian</div>
+            <div class="info-row">Floor: 10th</div>
+        </div>
 
-</script>
+        <!-- MAIN CONTENT PLACEHOLDER -->
+        <div class="section">
+            <h2>Overview</h2>
+            <p>ここに知識データが表示される（記事は別管理）</p>
+        </div>
+
+        <div class="section">
+            <h2>Appearance</h2>
+            <p>画像・説明領域</p>
+        </div>
+
+        <div class="section">
+            <h2>Abilities</h2>
+            <p>スキル・設定・能力など</p>
+        </div>
+
+        <div class="section">
+            <h2>History</h2>
+            <p>時系列データ</p>
+        </div>
+
+    </div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+    Nazarick Knowledge Base System v0.1
+</div>
 
 </body>
 </html>
