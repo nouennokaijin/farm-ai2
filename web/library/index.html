@@ -10,16 +10,24 @@ body {
     font-family: Arial, sans-serif;
     background: #0b0f1a;
     color: #e6e6e6;
+    height: 100vh;
+    overflow: hidden; /* ← 全体スクロール禁止 */
 }
 
 /* ===== TOP BAR ===== */
 .topbar {
+    height: 50px;
     background: #111827;
     padding: 10px 15px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid #2c2f3a;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
 }
 
 .logo {
@@ -37,18 +45,19 @@ body {
     cursor: pointer;
 }
 
-/* ===== LAYOUT ===== */
-.container {
-    display: flex;
-}
-
-/* LEFT MENU */
+/* ===== LEFT SIDEBAR ===== */
 .sidebar {
     width: 220px;
     background: #0f172a;
     border-right: 1px solid #2c2f3a;
-    height: calc(100vh - 50px);
+
+    position: fixed;
+    top: 50px;
+    left: 0;
+    bottom: 0;
+
     padding: 10px;
+    overflow-y: auto;
 }
 
 .sidebar h3 {
@@ -67,171 +76,20 @@ body {
     background: #1f2937;
 }
 
-/* CENTER CONTENT */
+/* ===== CONTENT AREA ===== */
 .content {
-    flex: 1;
+    position: fixed;
+    top: 50px;
+    left: 220px;
+    right: 0;
+    bottom: 0;
+
     padding: 20px;
+    overflow-y: auto; /* ← ここだけスクロール */
 }
 
 /* TAB BAR */
 .tabs {
     display: flex;
-    border-bottom: 1px solid #2c2f3a;
-    margin-bottom: 15px;
-}
+    border-bottom: 1px solid #2c2f
 
-.tab {
-    padding: 8px 12px;
-    cursor: pointer;
-    background: #111827;
-    margin-right: 5px;
-    border-radius: 5px 5px 0 0;
-}
-
-.tab.active {
-    background: #1f2937;
-    color: #a5b4fc;
-}
-
-/* INFO BOX */
-.infobox {
-    float: right;
-    width: 250px;
-    background: #111827;
-    border: 1px solid #2c2f3a;
-    padding: 10px;
-    margin-left: 15px;
-}
-
-.infobox h4 {
-    margin-top: 0;
-    color: #a5b4fc;
-}
-
-.info-row {
-    font-size: 13px;
-    margin-bottom: 6px;
-    border-bottom: 1px dotted #2c2f3a;
-    padding-bottom: 4px;
-}
-
-/* SECTION */
-.section {
-    margin-bottom: 20px;
-}
-
-.section h2 {
-    border-left: 4px solid #6366f1;
-    padding-left: 10px;
-}
-
-/* EDIT BAR */
-.editbar {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 10px;
-}
-
-.editbar button {
-    background: #1f2937;
-    border: 1px solid #374151;
-    color: white;
-    padding: 5px 8px;
-    cursor: pointer;
-}
-
-/* FOOTER */
-.footer {
-    text-align: center;
-    padding: 10px;
-    font-size: 12px;
-    color: #6b7280;
-    border-top: 1px solid #2c2f3a;
-}
-
-</style>
-</head>
-
-<body>
-
-<!-- TOP BAR -->
-<div class="topbar">
-    <div class="logo">🗂 ナザリック知識庫</div>
-    <div class="top-actions">
-        <button>Sign in</button>
-        <button>Watch</button>
-        <button>History</button>
-        <button>More</button>
-    </div>
-</div>
-
-<div class="container">
-
-    <!-- LEFT MENU -->
-    <div class="sidebar">
-        <h3>Navigation</h3>
-        <div class="menu-item">Main</div>
-        <div class="menu-item">Characters</div>
-        <div class="menu-item">Items</div>
-        <div class="menu-item">World</div>
-        <div class="menu-item">Library</div>
-    </div>
-
-    <!-- CONTENT -->
-    <div class="content">
-
-        <!-- TAB -->
-        <div class="tabs">
-            <div class="tab active">Article</div>
-            <div class="tab">Talk</div>
-            <div class="tab">Edit</div>
-            <div class="tab">History</div>
-        </div>
-
-        <!-- EDIT BAR -->
-        <div class="editbar">
-            <button>Edit source</button>
-            <button>Purge</button>
-            <button>Add section</button>
-        </div>
-
-        <!-- INFBOX -->
-        <div class="infobox">
-            <h4>Personal Data</h4>
-            <div class="info-row">Race: Unknown</div>
-            <div class="info-row">Affiliation: Nazarick</div>
-            <div class="info-row">Role: Librarian</div>
-            <div class="info-row">Floor: 10th</div>
-        </div>
-
-        <!-- MAIN CONTENT PLACEHOLDER -->
-        <div class="section">
-            <h2>Overview</h2>
-            <p>ここに知識データが表示される（記事は別管理）</p>
-        </div>
-
-        <div class="section">
-            <h2>Appearance</h2>
-            <p>画像・説明領域</p>
-        </div>
-
-        <div class="section">
-            <h2>Abilities</h2>
-            <p>スキル・設定・能力など</p>
-        </div>
-
-        <div class="section">
-            <h2>History</h2>
-            <p>時系列データ</p>
-        </div>
-
-    </div>
-</div>
-
-<!-- FOOTER -->
-<div class="footer">
-    Nazarick Knowledge Base System v0.1
-</div>
-
-</body>
-</html>
