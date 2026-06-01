@@ -1,206 +1,237 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>📚 Nazarick Library</title>
+<meta charset="UTF-8">
+<title>Nazarick Library OS</title>
 
-  <style>
-    body {
-      font-family: sans-serif;
-      background: #1e1e1e;
-      color: #ffffff;
-      margin: 0;
-      padding: 20px;
-    }
+<style>
+body {
+  margin: 0;
+  font-family: sans-serif;
+  display: flex;
+  height: 100vh;
+  background: #0f0f14;
+  color: #e6e6e6;
+}
 
-    h1 {
-      text-align: center;
-      color: gold;
-    }
+/* 左メニュー */
+#left {
+  width: 200px;
+  background: #151522;
+  padding: 10px;
+  box-sizing: border-box;
+}
 
-    .container {
-      max-width: 1200px;
-      margin: auto;
-    }
+.menu-btn {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 8px;
+  background: #222236;
+  border: none;
+  color: white;
+  cursor: pointer;
+  border-radius: 6px;
+}
 
-    .card {
-      background: #2a2a2a;
-      padding: 15px;
-      margin-bottom: 20px;
-      border-radius: 10px;
-    }
+/* 中央 */
+#center {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
 
-    label {
-      display: block;
-      margin-top: 10px;
-      margin-bottom: 5px;
-    }
+/* 右 */
+#right {
+  width: 260px;
+  background: #1a1a28;
+  padding: 10px;
+  box-sizing: border-box;
+  border-left: 1px solid #333;
+}
 
-    input,
-    textarea,
-    select {
-      width: 100%;
-      padding: 10px;
-      box-sizing: border-box;
-      border-radius: 5px;
-      border: none;
-    }
+/* カード */
+.card {
+  background: #222236;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
 
-    textarea {
-      min-height: 150px;
-      resize: vertical;
-    }
+input, textarea {
+  width: 100%;
+  padding: 8px;
+  margin: 5px 0;
+  background: #111;
+  color: white;
+  border: 1px solid #333;
+  border-radius: 6px;
+}
 
-    button {
-      margin-top: 15px;
-      padding: 10px 20px;
-      background: gold;
-      color: black;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-weight: bold;
-    }
+button.save {
+  width: 100%;
+  padding: 10px;
+  background: #4b4bff;
+  border: none;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+}
 
-    button:hover {
-      opacity: 0.9;
-    }
-
-    .entry {
-      border-left: 4px solid gold;
-      padding-left: 10px;
-      margin-bottom: 15px;
-    }
-
-    .tags {
-      color: #87cefa;
-      font-size: 0.9em;
-    }
-
-    .meta {
-      color: #aaaaaa;
-      font-size: 0.8em;
-    }
-  </style>
+.tag {
+  font-size: 12px;
+  color: #aaa;
+}
+</style>
 </head>
+
 <body>
 
-<div class="container">
+<!-- 左 -->
+<div id="left">
+  <button class="menu-btn" onclick="setMode('search')">🔍 Search</button>
+  <button class="menu-btn" onclick="setMode('record')">📚 Record</button>
+</div>
 
-  <h1>📚 Nazarick Library</h1>
+<!-- 中央 -->
+<div id="center">
+  ナザリック図書館OS 起動待機中...
+</div>
 
-  <!-- 検索 -->
-  <div class="card">
-    <h2>🔍 資料検索</h2>
-
-    <input
-      type="text"
-      id="searchInput"
-      placeholder="タイトル・タグ・本文を検索">
-
-    <button id="searchBtn">
-      検索
-    </button>
-  </div>
-
-  <!-- 新規登録 -->
-  <div class="card">
-    <h2>➕ 新規登録</h2>
-
-    <label>タイトル</label>
-    <input type="text" id="title">
-
-    <label>要約</label>
-    <textarea id="summary"></textarea>
-
-    <label>本文</label>
-    <textarea id="content"></textarea>
-
-    <label>タグ（カンマ区切り）</label>
-    <input
-      type="text"
-      id="tags"
-      placeholder="英検,学習,語彙">
-
-    <label>種別</label>
-    <select id="type">
-      <option value="memo">memo</option>
-      <option value="url">url</option>
-      <option value="document">document</option>
-      <option value="meeting_brief">meeting_brief</option>
-      <option value="meeting_result">meeting_result</option>
-    </select>
-
-    <label>登録者</label>
-    <input
-      type="text"
-      id="author"
-      value="kei">
-
-    <label>重要度</label>
-    <select id="importance">
-      <option value="1">1</option>
-      <option value="2">2</option>
-      <option value="3" selected>3</option>
-      <option value="4">4</option>
-      <option value="5">5</option>
-    </select>
-
-    <button id="saveBtn">
-      📚 登録
-    </button>
-  </div>
-
-  <!-- 一覧 -->
-  <div class="card">
-    <h2>📖 登録資料一覧</h2>
-
-    <div id="libraryList">
-
-      <!-- 動的生成 -->
-
-      <div class="entry">
-        <h3>英検1級学習計画</h3>
-
-        <div class="tags">
-          #英検 #学習 #語彙
-        </div>
-
-        <p>
-          語彙学習を優先する。
-        </p>
-
-        <div class="meta">
-          作成者: kei |
-          重要度: 5
-        </div>
-      </div>
-
-    </div>
-  </div>
-
+<!-- 右 -->
+<div id="right">
+  <h3>Detail</h3>
+  <div id="detail">未選択</div>
 </div>
 
 <script>
 
-  // 今後 app.js に移動
+// ============================
+// 🧠 ナザリックDB（簡易ローカル）
+// ============================
+let DB = JSON.parse(localStorage.getItem("nazarick_db") || "[]");
 
-  document
-    .getElementById("saveBtn")
-    .addEventListener("click", () => {
+let mode = "none";
 
-      alert("登録処理は次回実装");
+// ============================
+// モード切替
+// ============================
+function setMode(m){
+  mode = m;
 
-    });
+  if(m === "search") renderSearch();
+  if(m === "record") renderRecord();
+}
 
-  document
-    .getElementById("searchBtn")
-    .addEventListener("click", () => {
+// ============================
+// 検索AI（ダミー推論）
+// ============================
+function aiSearch(query){
+  if(!query) return [];
 
-      alert("検索処理は次回実装");
+  return DB.filter(d =>
+    d.title.includes(query) ||
+    d.content.includes(query) ||
+    d.tags.some(t => query.includes(t))
+  );
+}
 
-    });
+// ============================
+// タグAI（超簡易疑似AI）
+// ============================
+function aiTag(text){
+  let tags = [];
+
+  if(text.includes("魔法")) tags.push("magic");
+  if(text.includes("炎")) tags.push("fire");
+  if(text.includes("本")) tags.push("library");
+  if(text.includes("研究")) tags.push("research");
+
+  if(tags.length === 0) tags.push("misc");
+
+  return tags;
+}
+
+// ============================
+// レコード追加AI補助
+// ============================
+function saveRecord(){
+  let title = document.getElementById("title").value;
+  let content = document.getElementById("content").value;
+
+  let tags = aiTag(content);
+
+  let data = {
+    id: Date.now(),
+    title,
+    content,
+    tags,
+    created: new Date().toISOString()
+  };
+
+  DB.push(data);
+  localStorage.setItem("nazarick_db", JSON.stringify(DB));
+
+  alert("ナザリックに記録された");
+
+  renderRecord();
+}
+
+// ============================
+// 検索画面
+// ============================
+function renderSearch(){
+  document.getElementById("center").innerHTML = `
+    <h2>🔍 Search Mode</h2>
+    <input id="searchBox" placeholder="曖昧検索OK（例：炎の魔法）">
+    <button onclick="doSearch()">検索</button>
+    <div id="results"></div>
+  `;
+}
+
+function doSearch(){
+  let q = document.getElementById("searchBox").value;
+  let res = aiSearch(q);
+
+  let html = res.map(r => `
+    <div class="card" onclick="showDetail(${r.id})">
+      <b>${r.title}</b><br>
+      <div class="tag">${r.tags.join(", ")}</div>
+    </div>
+  `).join("");
+
+  document.getElementById("results").innerHTML =
+    html || "該当なし";
+}
+
+// ============================
+// 記録画面
+// ============================
+function renderRecord(){
+  document.getElementById("center").innerHTML = `
+    <h2>📚 Record Mode</h2>
+
+    <input id="title" placeholder="タイトル">
+    <textarea id="content" rows="8" placeholder="ここに記録..."></textarea>
+
+    <button class="save" onclick="saveRecord()">
+      🧠 記憶に刻む
+    </button>
+  `;
+}
+
+// ============================
+// 詳細表示
+// ============================
+function showDetail(id){
+  let item = DB.find(d => d.id === id);
+
+  document.getElementById("detail").innerHTML = `
+    <b>${item.title}</b><br><br>
+    ${item.content}<br><br>
+    <div class="tag">tags: ${item.tags.join(", ")}</div>
+  `;
+}
 
 </script>
 
