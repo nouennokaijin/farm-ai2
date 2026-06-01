@@ -12,9 +12,10 @@ html, body {
     font-family: Arial, sans-serif;
     background: #111827;
     color: #e6e6e6;
+    overflow: hidden; /* ← 全体スクロール禁止 */
 }
 
-/* ===== TOP ===== */
+/* ===== TOP BAR ===== */
 .topbar {
     height: 50px;
     background: #0f172a;
@@ -25,6 +26,11 @@ html, body {
     justify-content: space-between;
 
     padding: 0 15px;
+
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
 }
 
 .logo {
@@ -32,7 +38,6 @@ html, body {
     font-weight: bold;
 }
 
-/* search */
 .search {
     width: 300px;
     background: #1f2937;
@@ -42,17 +47,16 @@ html, body {
     border-radius: 4px;
 }
 
-/* ===== LAYOUT ===== */
-.wrapper {
-    display: flex;
-    height: calc(100vh - 50px);
-}
-
-/* LEFT */
+/* ===== LEFT SIDEBAR ===== */
 .sidebar {
     width: 220px;
     background: #0b0f1a;
     border-right: 1px solid #2c2f3a;
+
+    position: fixed;
+    top: 50px;
+    left: 0;
+    bottom: 0;
 
     padding: 10px;
     overflow-y: auto;
@@ -61,18 +65,23 @@ html, body {
 .menu {
     padding: 8px;
     border-radius: 4px;
+    cursor: pointer;
 }
 
 .menu:hover {
     background: #1f2937;
 }
 
-/* CENTER */
+/* ===== CENTER CONTENT ===== */
 .content {
-    flex: 1;
-    padding: 15px;
+    position: fixed;
+    top: 50px;
+    left: 220px;
+    right: 0;
+    bottom: 0;
 
-    overflow-y: auto;
+    padding: 15px;
+    overflow-y: auto; /* ← ここだけスクロール */
 }
 
 /* TAB */
@@ -108,7 +117,7 @@ html, body {
     padding-left: 8px;
 }
 
-/* CLEAR FLOAT */
+/* CLEAR */
 .clear {
     clear: both;
 }
@@ -129,8 +138,8 @@ html, body {
     </div>
 </div>
 
-<!-- BODY -->
-<div class="wrapper">
+<!-- MAIN WRAP -->
+<div>
 
     <!-- LEFT -->
     <div class="sidebar">
@@ -160,17 +169,22 @@ html, body {
 
         <div class="section">
             <h2>Overview</h2>
-            <p>ちゃんと表示されるテスト文章</p>
+            <p>ここがスクロール領域になってる（中央だけ動く）</p>
         </div>
 
         <div class="section">
             <h2>Appearance</h2>
-            <p>ここも表示される</p>
+            <p>ダーク図書館っぽい情報表示</p>
         </div>
 
         <div class="section">
             <h2>Abilities</h2>
-            <p>ここも表示される</p>
+            <p>スキル・設定</p>
+        </div>
+
+        <div class="section">
+            <h2>History</h2>
+            <p>時系列ログ</p>
         </div>
 
         <div class="clear"></div>
