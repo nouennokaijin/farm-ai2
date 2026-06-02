@@ -3,138 +3,292 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>ナザリック知識庫</title>
+<title>ナザリック Site Builder</title>
 
 <style>
-
 *{
     margin:0;
     padding:0;
     box-sizing:border-box;
 }
 
-html,
 body{
-    width:100%;
-    height:100%;
-    overflow:hidden;
-    font-family:sans-serif;
-}
-
-/* 全体 */
-.wrapper{
-    display:flex;
-    flex-direction:column;
+    font-family:"Segoe UI",sans-serif;
+    background:#f2f4f7;
     height:100vh;
+    overflow:hidden;
 }
 
-/* 上メニュー */
 .header{
     height:60px;
-    flex-shrink:0;
-
-    background:#2a2a2a;
+    background:#1f2937;
     color:white;
-
     display:flex;
     align-items:center;
+    justify-content:space-between;
     padding:0 20px;
 }
 
-/* 下エリア */
-.content{
-    flex:1;
+.logo{
+    font-size:20px;
+    font-weight:bold;
+}
+
+.actions{
     display:flex;
-    overflow:hidden;
+    gap:10px;
 }
 
-/* 左メニュー */
-.sidebar{
-    width:250px;
-    flex-shrink:0;
+.btn{
+    border:none;
+    padding:10px 16px;
+    border-radius:6px;
+    cursor:pointer;
+}
 
-    background:#3a3a3a;
+.btn-save{
+    background:#e5e7eb;
+}
+
+.btn-publish{
+    background:#22c55e;
     color:white;
-
-    padding:20px;
 }
 
-/* 中央 */
+.container{
+    display:flex;
+    height:calc(100vh - 60px);
+}
+
+.sidebar{
+    width:260px;
+    background:white;
+    border-right:1px solid #ddd;
+    overflow:auto;
+}
+
+.sidebar h3{
+    padding:15px;
+    border-bottom:1px solid #eee;
+}
+
+.menu-item{
+    padding:12px 15px;
+    cursor:pointer;
+    border-bottom:1px solid #f1f1f1;
+}
+
+.menu-item:hover{
+    background:#f8fafc;
+}
+
 .main{
     flex:1;
-
-    background:#f5f5f5;
-
-    overflow-y:auto;
-    padding:20px;
+    display:flex;
 }
 
-/* 動作確認用 */
-.card{
+.editor{
+    width:50%;
     background:white;
-    margin-bottom:15px;
-    padding:20px;
-    border-radius:8px;
+    border-right:1px solid #ddd;
+    display:flex;
+    flex-direction:column;
 }
 
+.editor-header{
+    padding:15px;
+    border-bottom:1px solid #eee;
+    font-weight:bold;
+}
+
+.editor-body{
+    padding:20px;
+    overflow:auto;
+}
+
+input, textarea{
+    width:100%;
+    margin-top:8px;
+    margin-bottom:15px;
+    padding:10px;
+    border:1px solid #ccc;
+    border-radius:6px;
+}
+
+textarea{
+    min-height:250px;
+    resize:vertical;
+}
+
+.preview{
+    flex:1;
+    background:#e5e7eb;
+    padding:20px;
+    overflow:auto;
+}
+
+.phone{
+    width:380px;
+    margin:auto;
+    background:white;
+    border-radius:20px;
+    overflow:hidden;
+    box-shadow:0 0 20px rgba(0,0,0,.15);
+}
+
+.phone-header{
+    background:#0f172a;
+    color:white;
+    text-align:center;
+    padding:20px;
+}
+
+.phone-body{
+    padding:20px;
+}
+
+.card{
+    border:1px solid #ddd;
+    border-radius:10px;
+    padding:15px;
+    margin-top:15px;
+}
+
+.settings{
+    margin-top:20px;
+    border-top:1px solid #eee;
+}
+
+.settings h4{
+    padding:15px;
+}
+
+.setting-item{
+    padding:12px 15px;
+    border-bottom:1px solid #f1f1f1;
+}
 </style>
 </head>
 
 <body>
 
-<div class="wrapper">
+<div class="header">
+    <div class="logo">🏛 ナザリック Site Builder</div>
 
-    <!-- 上 -->
-    <div class="header">
-        ナザリック知識庫
+    <div class="actions">
+        <button class="btn btn-save">保存</button>
+        <button class="btn btn-publish">公開</button>
     </div>
+</div>
 
-    <!-- 左＋中央 -->
-    <div class="content">
+<div class="container">
 
-        <div class="sidebar">
-            <p>📚 検索</p>
-            <br>
-            <p>📝 記録</p>
-            <br>
-            <p>🔖 URL</p>
-            <br>
-            <p>⚙ 設定</p>
+    <div class="sidebar">
+
+        <h3>ページ</h3>
+
+        <div class="menu-item">🏠 ホーム</div>
+        <div class="menu-item">📚 知識庫</div>
+        <div class="menu-item">🔍 検索</div>
+        <div class="menu-item">🤖 AIツール</div>
+        <div class="menu-item">📞 お問い合わせ</div>
+
+        <div class="settings">
+            <h4>サイト設定</h4>
+
+            <div class="setting-item">サイト情報</div>
+            <div class="setting-item">SEO</div>
+            <div class="setting-item">メニュー</div>
+            <div class="setting-item">テーマ</div>
+            <div class="setting-item">バックアップ</div>
         </div>
 
-        <div class="main">
+    </div>
 
-            <h2>中央だけスクロール確認</h2>
+    <div class="main">
 
-            <br>
+        <div class="editor">
 
-            <div class="card">データ1</div>
-            <div class="card">データ2</div>
-            <div class="card">データ3</div>
-            <div class="card">データ4</div>
-            <div class="card">データ5</div>
-            <div class="card">データ6</div>
-            <div class="card">データ7</div>
-            <div class="card">データ8</div>
-            <div class="card">データ9</div>
-            <div class="card">データ10</div>
-            <div class="card">データ11</div>
-            <div class="card">データ12</div>
-            <div class="card">データ13</div>
-            <div class="card">データ14</div>
-            <div class="card">データ15</div>
-            <div class="card">データ16</div>
-            <div class="card">データ17</div>
-            <div class="card">データ18</div>
-            <div class="card">データ19</div>
-            <div class="card">データ20</div>
+            <div class="editor-header">
+                ページ編集
+            </div>
+
+            <div class="editor-body">
+
+                <label>タイトル</label>
+                <input
+                    value="ナザリック大図書館"
+                    id="title">
+
+                <label>本文</label>
+
+                <textarea id="content">
+AIと知識を集約する個人知識管理システム
+
+知識を保存し、
+検索し、
+活用するためのデジタル図書館。
+                </textarea>
+
+            </div>
+
+        </div>
+
+        <div class="preview">
+
+            <div class="phone">
+
+                <div class="phone-header">
+                    ナザリック大図書館
+                </div>
+
+                <div class="phone-body">
+
+                    <h2>ようこそ</h2>
+
+                    <p>
+                        AIと知識を集約する
+                        個人知識管理システム
+                    </p>
+
+                    <div class="card">
+                        📚 知識管理
+                    </div>
+
+                    <div class="card">
+                        🔍 検索
+                    </div>
+
+                    <div class="card">
+                        🤖 AI支援
+                    </div>
+
+                </div>
+
+            </div>
 
         </div>
 
     </div>
 
 </div>
+
+<script>
+
+const title = document.getElementById("title");
+const content = document.getElementById("content");
+
+title.addEventListener("input",()=>{
+    document.querySelector(".phone-header").textContent=
+    title.value;
+});
+
+content.addEventListener("input",()=>{
+    document.querySelector(".phone-body p").textContent=
+    content.value;
+});
+
+</script>
 
 </body>
 </html>
