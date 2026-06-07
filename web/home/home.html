@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ナザリック統括画面</title>
+
+<style>
+
+/* =========================
+   ベース安定化
+========================= */
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+html, body{
+    height:100%;
+    background:#000;
+    color:#d7a45b;
+    font-family:"Yu Gothic",sans-serif;
+    overflow-x:hidden; /* 横崩壊完全封印 */
+}
+
+/* =========================
+   王座カード
+========================= */
+
+.card{
+    width:100%;
+    max-width:900px;
+    margin:40px auto;
+    padding:24px;
+
+    background:#1a1a1a;
+    border:1px solid #d7a45b;
+    border-radius:10px;
+
+    position:relative;
+    cursor:pointer;
+
+    box-sizing:border-box;
+
+    transition:transform .2s ease;
+}
+
+.card:hover{
+    transform:translateY(-2px);
+}
+
+/* =========================
+   タイトル
+========================= */
+
+.card h2{
+    margin:0 0 10px 0;
+    font-size:22px;
+    letter-spacing:2px;
+}
+
+/* =========================
+   サブテキスト
+========================= */
+
+.subtitle{
+    opacity:0.85;
+    margin-bottom:10px;
+}
+
+/* =========================
+   隠し碑文
+========================= */
+
+.secret-note{
+    margin-top:18px;
+    font-size:14px;
+    line-height:1.7;
+
+    color:rgba(215,164,91,0.25);
+
+    opacity:0;
+    transform:translateY(6px);
+    transition:opacity .6s ease, transform .6s ease;
+
+    user-select:none;
+    pointer-events:none;
+}
+
+/* 開放状態 */
+.card.active .secret-note{
+    opacity:1;
+    transform:translateY(0);
+}
+
+/* =========================
+   軽い装飾ライン
+========================= */
+
+.card::before{
+    content:"";
+    position:absolute;
+    left:0;
+    top:0;
+    width:4px;
+    height:100%;
+    background:linear-gradient(#ffd700, transparent, #8b6a2b);
+    opacity:.5;
+}
+
+/* =========================
+   メニュー風（再利用可能）
+========================= */
+
+.menu-item{
+    margin-top:12px;
+    padding:12px 14px;
+
+    background:linear-gradient(145deg,#1a1a1a,#0f0f0f);
+    border:1px solid #6d5522;
+    border-radius:8px;
+
+    cursor:pointer;
+    user-select:none;
+
+    transition:.2s;
+}
+
+.menu-item:hover{
+    border-color:#a8842f;
+    background:#222;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="card" id="throne">
+
+    <h2>🏰 王座の間</h2>
+
+    <div class="subtitle">
+        ナザリック地下大墳墓 統括画面
+    </div>
+
+    <div class="secret-note">
+        ナザリック地下大墳墓は、階層構造によって統治された支配領域である。<br><br>
+
+        第一〜第三階層：侵入抑止領域<br>
+        第四〜第七階層：戦術迎撃領域<br>
+        第八階層以降：絶対支配領域<br>
+        第十階層：王座の間（統治中枢）<br><br>
+
+        この構造は単なる防衛施設ではなく、「侵入という概念を無効化する設計思想」に基づいて構築されている。
+    </div>
+
+</div>
+
+<script>
+const throne = document.getElementById("throne");
+
+throne.addEventListener("click", () => {
+    throne.classList.toggle("active");
+});
+</script>
+
+</body>
+</html>

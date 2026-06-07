@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+body{
+    background:linear-gradient(145deg,#1a1a1a,#0f0f0f);
+    color:#d7a45b;
+    font-family:"Yu Gothic",sans-serif;
+}
+.card{
+    padding:20px;
+    background:#1a1a1a;
+    border:1px solid #d7a45b;
+    min-height:200px;
+}
+.menu-item{
+    position:relative;
+    padding:12px 14px;
+    margin-top:12px;
+    cursor:pointer;
+    user-select:none;
+
+    color:#b89a55;
+    background:linear-gradient(145deg,#1a1a1a,#0f0f0f);
+    border:1px solid #6d5522;
+    border-radius:8px;
+
+    transition:.25s;
+}
+
+.menu-item:hover{
+    background:linear-gradient(145deg,#222,#111);
+    border-color:#a8842f;
+}
+</style>
+</head>
+<body>
+<div class="card">
+
+    <h1>📋 執務室</h1>
+
+    <p>思考は結晶となり、世界は静かに動き出す</p>
+
+    <br>
+
+    <ul>
+        <li>スケジュール</li>
+        <li>ToDo</li>
+        <li>プロジェクト</li>
+        <li>メモ</li>
+    </ul>
+
+    <div class="menu-item"
+         onclick="parent.changePage('./schedule/calendar.html',this)">
+        📋 カレンダー
+    </div>
+　　<br><br><br><br><br><br><br><br><br><br><br><br>
+　　<br><br><br><br><br><br><br><br><br><br><br><br>
+　　<br><br><br><br><br><br><br><br><br><br><br><br>
+　　<br><br><br><br><br><br><br><br><br><br><br><br>
+</div>
+    <br><br><br>
+</body>
+</html>

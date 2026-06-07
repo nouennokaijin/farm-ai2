@@ -1,0 +1,108 @@
+body{
+    margin:0;
+    padding:0;
+    background:#000;
+    color:#d7a45b;
+    font-family:"Yu Gothic",sans-serif;
+}
+.card{
+    padding:20px;
+    background:#1a1a1a;
+    border:1px solid #d7a45b;
+    min-height:200px;
+}
+.menu-item{
+    position:relative;
+    padding:12px 14px;
+    margin-top:12px;
+    cursor:pointer;
+    user-select:none;
+
+    color:#b89a55;
+    background:linear-gradient(145deg,#1a1a1a,#0f0f0f);
+    border:1px solid #6d5522;
+    border-radius:8px;
+
+    transition:.25s;
+}
+
+.menu-item:hover{
+    background:linear-gradient(145deg,#222,#111);
+    border-color:#a8842f;
+}
+/* =========================
+   ナザリック統一安定CSS
+   （iframe内専用・完全防御版）
+========================= */
+
+/* ベースリセット */
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+/* HTML / body完全封印 */
+html, body{
+    width:100%;
+    height:100%;
+    overflow-x:hidden;   /* 横崩壊完全遮断 */
+    background:#000;
+}
+
+/* 画像暴走防止 */
+img{
+    max-width:100%;
+    height:auto;
+    display:block;
+}
+
+/* テーブル暴走防止 */
+table{
+    width:100%;
+    border-collapse:collapse;
+    table-layout:fixed;
+}
+
+/* フレックス暴走防止 */
+.flex{
+    display:flex;
+    min-width:0;
+}
+
+.flex > *{
+    min-width:0;
+}
+
+/* 全体コンテナ安定 */
+.container{
+    width:100%;
+    max-width:100%;
+    overflow:hidden;
+}
+
+/* カード共通安定 */
+.card{
+    width:100%;
+    max-width:100%;
+    box-sizing:border-box;
+    overflow-wrap:break-word;
+    word-break:break-word;
+}
+
+/* ボタン・UI暴走防止 */
+button, .btn{
+    max-width:100%;
+}
+
+/* iframe内安全フラグ */
+iframe{
+    max-width:100%;
+    border:none;
+    display:block;
+}
+
+/* 横スクロール強制封印（最終防御） */
+body::-webkit-scrollbar{
+    height:0;
+}

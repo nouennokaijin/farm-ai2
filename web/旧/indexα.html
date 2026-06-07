@@ -68,7 +68,7 @@ body{
 /* 縮小 */
 
 .header.shrink{
-    height:60px;
+    height:70px;
 }
 
 .header.shrink .header-image{
@@ -76,7 +76,7 @@ body{
 }
 
 .header.shrink .header-overlay h1{
-    font-size:20px;
+    font-size:24px;
 }
 
 .header.shrink .header-overlay p{
@@ -241,7 +241,7 @@ body{
 <body>
 
 <header class="header">
-    <img src="https://i.ibb.co/LzY3q02f/header.png" class="header-image" alt="header">
+    <img src="./images/header.png" class="header-image">
     <div class="header-overlay">
         <h1>ナザリック地下大墳墓</h1>
         <p>すべての記録は、ここへ還る</p>
@@ -251,46 +251,53 @@ body{
 <div class="container">
 
     <div class="sidebar">
-      <div class="menu-item active"onclick="changePage('./home/home.html',this)">
-        🏰 王座の間
-      </div>
-      <div class="menu-item" onclick="changePage('./schedule/schedule.html',this)">
-        📋 執務室
-      </div>
-      <div class="menu-item" onclick="changePage('./treasury/treasury.html',this)">
-        💎 宝物殿
-      </div>
-      <div class="menu-item" onclick="changePage('./library/library.html',this)">
-        📚 大図書館
-      </div>
-      <div class="menu-item" onclick="changePage('./training/training.html',this)">
-        ⚔ 第六階層
-      </div>
-        <br><br>
+<div class="menu-item active"
+onclick="changePage('./home/home.html',this)">
+🏰 王座の間
+</div>
+
+<div class="menu-item"
+onclick="changePage('./schedule/schedule.html',this)">
+📋 執務室
+</div>
+
+<div class="menu-item"
+onclick="changePage('./treasury/treasury.html',this)">
+💎 宝物殿
+</div>
+
+<div class="menu-item"
+onclick="changePage('./library/library.html',this)">
+📚 大図書館
+</div>
+
+<div class="menu-item"
+onclick="changePage('./training/training.html',this)">
+⚔ 第六階層
+</div>
         <div class="sidebar-footer">
+            <span class="icon">🌾</span>
             <span class="text">農園の怪人</span>
             <span class="date">2026/06/06</span>
         </div>
-        <br><br>
+
     </div>
+
     <div class="main">
+
         <iframe
             id="contentFrame"
             src="./home/home.html"
             style="
                 width:100%;
                 height:100%;
+                border:none;
                 background:#000;
-                border: none;  /* 枠線を消す */
-                display: block; /* インライン要素特有の隙間を消す */
-                margin: 0;      /* 外側の余白を消す */
-                padding: 0;     /* 内側の余白を消す */
             ">
         </iframe>
     </div>
 </div>
 <script>
-
 const header = document.querySelector(".header");
 const items = document.querySelectorAll(".menu-item");
 const frame = document.getElementById("contentFrame");
@@ -301,7 +308,7 @@ function clearActive(){
     });
 }
 
-function changePage(url, clicked){
+function changePage(url,clicked){
     frame.src = url;
     clearActive();
     if(clicked){
@@ -309,19 +316,15 @@ function changePage(url, clicked){
     }
 }
 
-// iframe内部スクロール監視
-frame.addEventListener("load", () => {
-    const doc = frame.contentDocument || frame.contentWindow.document;
+main.addEventListener("scroll",()=>{
 
-    doc.addEventListener("scroll", () => {
-        const y = doc.documentElement.scrollTop || doc.body.scrollTop;
-        if(y > 50){
-            header.classList.add("shrink");
-        }else{
-            header.classList.remove("shrink");
-        }
-    });
+    if(main.scrollTop > 50){
+        header.classList.add("shrink");
+    }else{
+        header.classList.remove("shrink");
+    }
 });
 </script>
+
 </body>
 </html>
