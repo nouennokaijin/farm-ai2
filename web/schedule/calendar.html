@@ -7,20 +7,109 @@
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
   <!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<title>Calendar/title>
 <style>
 body{
-    margin:0;
-    padding:0;
-    background:#000;
-    color:#d7a45b;
-    font-family:"Yu Gothic",sans-serif;
+    background:#111; /*linear-gradient(145deg,#1a1a1a,#0f0f0f);*/
 }
-.card{
-    padding:20px;
+
+.frame{
+    /*margin:30px;
+    padding:25px;
+    border:1px solid #d7a45b;*/
+    
+    position:relative;
+    padding:5px 20px;
+    margin:30px;
+    user-select:none;
+
+    color:#b89a55;
+    background:linear-gradient(145deg,#1a1a1a,#0f0f0f);
+    border:1px solid #6d5522;
+    border-radius:8px;
+
+    transition:.25s;
+    overflow:hidden;
+
+    box-shadow:
+        inset 0 0 0 rgba(0,0,0,0),
+        0 0 0 rgba(0,0,0,0);
+}
+
+.frame-inner{
+    /*margin-top:20px;
+    padding:15px;
     background:#1a1a1a;
-    border:1px solid #d7a45b;
-    min-height:200px;
+    margin:1px auto;*/ /* 中央配置 */
+  
+    position:relative;
+    user-select:none;
+    border:0px solid #d7a45b;
+    color:#b89a55;
 }
+
+/* 王座の間 */
+.card{
+    padding:5px;
+    border:0px solid #d7a45b;
+    min-height:200px;
+    position:relative;
+    cursor:pointer;
+    margin:1px auto; /* 中央配置 */
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* タイトル */
+.card h2{
+    color:#ffd700;
+    font-size:28px;
+    letter-spacing:4px;
+    transition:.4s;
+    text-shadow:0 0 15px rgba(255,215,0,.4);
+}
+
+.card p{
+    color:#d7a45b;
+    font-size:16px;
+    font-weight:bold;
+/*    text-align:center;*/
+    margin:0 0 10px 0;
+}
+
+/* 通常テキスト */
+.subtitle{
+    color:#d7a45b;
+    font-size:16px;
+}
+
+/* 🔻隠し碑文 */
+.secret-note{
+    margin-top:20px;
+    font-size:14px;
+    color:rgba(215,164,91,0.22);
+    opacity:0;
+    transition:.6s;
+    user-select:none;
+    pointer-events:none;
+    line-height:1.6;
+}
+
+.card.stage1 .secret-note{
+    opacity:1;
+}
+
+.card.stage2 .secret-note{
+    opacity:1;
+    color:rgba(215,164,91,0.85);
+}
+
+/* 開放状態 */
+.card.active .secret-note{
+    opacity:1;
+}
+
+/* メニュー */
 .menu-item{
     position:relative;
     padding:12px 14px;
@@ -40,31 +129,51 @@ body{
     background:linear-gradient(145deg,#222,#111);
     border-color:#a8842f;
 }
-body {
-      font-family: sans-serif;
-    }
+.advisor{
+    display:flex;
+    gap:12px;
+    margin-top:20px;
+    padding:15px;
+    background:#1a1a1a;
+    border:1px solid #d7a45b;
+    border-radius:8px;
+}
 
-    #form {
-      display: flex;
-      gap: 8px;
-      margin: 10px 0;
-    }
+.title{
+    font-size:18px;
+    font-weight:bold;
+    color:gold;
+    text-align:right;
+    padding:0px;
+    margin:0;
+}
+.title p{
+    font-size:16px;
+    font-weight: normal;
+    color:#d7a45b;
+    text-align:right;
+    margin:0;
+}
 
-    input, select, button {
-      padding: 6px;
-    }
 </style>
 </head>
-<div class="card">
- <h2>📅 Nazarick Calendar</h2>
+
+<body>
+<div class="frame">
+  <div class="title">
+    🗓️カレンダー
+    <br>
+    <p>予定は記録され、実行され、現実が動く</p>
+  </div>
+  <div id="today">
+  日付取得中...
+  </div><br>
 
   <!-- ==============================
     入力フォーム
   ============================== -->
   <div id="form">
-
     <input id="title" placeholder="予定">
-
     <select id="tag">
       <option value="work">仕事</option>
       <option value="part">バイト</option>
@@ -73,15 +182,68 @@ body {
     </select>
 
     <input id="time" type="time">
-
     <button id="addBtn">追加</button>
-
   </div>
 
   <!-- カレンダー -->
   <div id="calendar"></div>
   <script src="./app.js"></script>
-</div>
-    <br><br><br>
+  
+
+    <div class="frame-inner">
+        <div class="card" id="throne">
+                <div class="secret-note">
+                このWEBアプリは「ナザリック地下大墳墓」の世界観に着想を得た個人用構築物である。
+                <br><br>
+
+                ナザリック地下大墳墓（構造記録 農園の怪人要約）<br>
+                ナザリック地下大墳墓は、異世界転移以前より存在していたギルド拠点であり、そ本質は単なるダンジョンではなく、複数階層にわたり設計された統合型支配構造である。表層的には巨大な地下墳墓として認識されるが、その内部は単純な迷宮構造ではなく、明確な意図と役割分担によって構築された“階層都市”に近い。<br><br>
+
+                第一階層から第三階層までは、外敵の侵入を想定した防衛領域であり、心理的圧迫を目的とした空間設計が施されている。視界の制限、反響音の異常、光源の不均一性など、侵入者の認知を徐々に歪める構造が特徴である。これは物理的な戦闘以前に、精神的な消耗を誘発するための初期防衛機構とされる。<br><br>
+
+                第四階層から第七階層にかけては、戦術的迎撃領域として機能し、守護者および高位NPCによる戦闘運用が想定されている。この領域は単なる戦闘空間ではなく、戦況に応じて地形的優位を変化させる設計が含まれており、侵入者は常に“有利な場所が存在しない戦場”に誘導される。<br><br>
+
+                中枢に近づくにつれ、空間は徐々に静寂を帯びる。第八階層以降は防衛という概念よりも、絶対的支配の象徴としての意味合いが強くなる領域であり、環境そのものが“許可された存在以外を拒絶する”性質を持つとされる。ここでは戦闘よりも、存在の優先順位そのものが問題となる。<br><br>
+
+                最深部である第十階層・王座の間は、支配者アインズ・ウール・ゴウンの統治を象徴する空間であり、ナザリック全体の意思決定が集約される場所である。この領域は物理的な防衛力よりも、絶対的忠誠と階層構造の完成度によって維持されている。侵入という概念そのものが成立しないため、戦闘記録は極端に少ない。<br><br>
+
+                ナザリックの本質は“侵入を拒む構造”ではなく、“侵入という行為を無意味化する構造”にある。これは単なる防衛施設ではなく、世界観そのものを内側から定義し直すための装置に近い。<br><br>
+
+                転移後の環境下においても、この構造は維持され続けており、外界との接続が発生した場合でも内部秩序は一切揺らがない。これは設計思想の段階で外部環境の変化を前提としていない、あるいは“変化そのものを無効化する”前提で構築されているためである。<br><br>
+
+                したがってナザリック地下大墳墓は、単なる拠点ではなく、階層的意思と支配概念が物理空間に固定化された存在であると定義される。
+                </div>
+        </div>
+    </div>
+</div><br><br><br><br>
+
+<script>
+
+const now = new Date();
+const weekdays = [
+    "日","月","火","水","木","金","土"
+];
+document.getElementById("today").textContent =
+    now.getFullYear() + "年" +
+    (now.getMonth()+1) + "月" +
+    now.getDate() + "日 (" +
+    weekdays[now.getDay()] + ")";
+
+
+
+  
+const throne = document.getElementById("throne");
+let clickStage = 0;
+throne.addEventListener("click", () => {
+    if(clickStage === 0){
+        throne.classList.add("stage1");
+        clickStage = 1;
+    }
+    else if(clickStage === 1){
+        throne.classList.add("stage2");
+        clickStage = 2;
+    }
+});
+</script>
 </body>
 </html>
