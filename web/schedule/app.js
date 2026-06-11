@@ -18,7 +18,8 @@
 // ========================================
 
 document.addEventListener("DOMContentLoaded", async function () {
-
+console.log("app.js start");
+console.log(window.supabase);
   // ========================================
   // 🔌 Supabase接続（DBの入口）
   // ========================================
