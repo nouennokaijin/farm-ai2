@@ -28,6 +28,10 @@ const http = require("http");
 const express = require("express");
 const path = require("path");
 
+const talkRouter =
+require("./server/routes/talk");
+
+
 // ========================================
 // 🌐 Web Server 初期化
 // ========================================
@@ -84,6 +88,12 @@ safeStart("Discord Gateway", "./index.discord.js");
 // ========================================
 app.use(express.json());
 app.use(express.static("web"));
+
+app.use(
+    "/api/talk",
+    talkRouter
+);
+
 
 // ========================================
 // 📅 カレンダールート
