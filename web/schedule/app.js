@@ -1,261 +1,334 @@
-// ========================================
-// 📁 FOLDER : web/calendar
-// 📄 FILE   : app.js
-// 📅 DATE   : 2026/05/30
-// 👤 AUTHOR : OKIURA KAZUO
-// ========================================
-//
-// 📅 Nazarick Calendar
-// Supabase + FullCalendar + Discord連携対応設計
-//
-// 🎯 機能概要
-// ・予定の取得（Supabase）
-// ・予定の追加
-// ・予定の編集 / 削除
-// ・タグ分類（仕事/バイト/ヘルス/その他）
-// ・リアルタイム同期
-// ・日別ビュー切替
-// ========================================
+import { createClient } from "https://esm.sh/@supabase/supabase-js";
+import { Calendar } from "https://esm.sh/@fullcalendar/core";
+import dayGridPlugin from "https://esm.sh/@fullcalendar/daygrid";
+import timeGridPlugin from "https://esm.sh/@fullcalendar/timegrid";
+import interactionPlugin from "https://esm.sh/@fullcalendar/interaction";
 
-document.addEventListener("DOMContentLoaded", async function () {
-console.log("app.js start");
-console.log(window.supabase);
-  // ========================================
-  // 🔌 Supabase接続（DBの入口）
-  // ========================================
-  const supabase = window.supabase.createClient(
-    "https://stgaqwmdhnddqayqmedi.supabase.co",
-    "sb_publishable_cabU7_5aabCnGMdXAvitNw_VsX6JhKk"
-  );
+/* =====================
+Supabase
+===================== */
 
-  // ========================================
-  // 🏷 タグカラー定義（UI視認性強化）
-  // ========================================
-  function getTagColor(tag) {
-    if (tag === "work") return "#4dabf7";     // 仕事
-    if (tag === "part") return "#51cf66";     // バイト
-    if (tag === "health") return "#ff6b6b";   // 健康
-    return "#9775fa";                         // その他
+const SUPABASE_URL =
+  "https://stgaqwmdhnddqayqmedi.supabase.co";
+
+const SUPABASE_KEY =
+  "sb_publishable_cabU7_5aabCnGMdXAvitNw_VsX6JhKk";
+
+const supabase =
+  createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* =====================
+state
+===================== */
+
+let calendarInstance = null;
+let selectedDate = "";
+let currentDayData = [];
+
+/* =====================
+タグ色
+===================== */
+
+function getTagColor(tag) {
+
+  switch (tag) {
+
+    case "work":
+      return "#0984e3";
+
+    case "meeting":
+      return "#6c5ce7";
+
+    case "management":
+      return "#00b894";
+
+    case "private":
+      return "#fd79a8";
+
+    default:
+      return "#636e72";
+
+  }
+}
+
+/* =====================
+日別一覧（★ここが今回のメイン修正）
+===================== */
+
+async function openDayModal(date) {
+
+  selectedDate = date;
+
+  const modal = document.getElementById("dayModal");
+  const title = document.getElementById("dayTitle");
+  const list = document.getElementById("eventList");
+
+  title.textContent = date;
+  list.innerHTML = "読込中...";
+  modal.style.display = "flex";
+
+  const { data, error } = await supabase
+    .from("events")
+    .select("*")
+    .eq("event_date", date)
+    .order("start_time");
+
+  if (error) {
+    console.error(error);
+    list.innerHTML = "取得失敗";
+    return;
   }
 
-  // ========================================
-  // 📥 イベント取得（DB → 表示用変換前）
-  // ========================================
-  async function fetchEvents() {
-    const { data, error } = await supabase
+  currentDayData = data || [];
+
+  if (currentDayData.length === 0) {
+    list.innerHTML = "予定なし";
+    return;
+  }
+
+  list.innerHTML = "";
+
+  currentDayData.forEach(ev => {
+
+    const row = document.createElement("div");
+    row.className = "event-row";
+
+    // ★ 持ち物表示は完全削除（一覧はシンプル化）
+
+    row.innerHTML = `
+      <div class="event-time">
+        ${ev.start_time ? ev.start_time.substring(0, 5) : "--:--"}
+      </div>
+
+      <div class="event-tag tag-${ev.tag}">
+        ${ev.tag}
+      </div>
+
+      <div class="event-title">
+        ${ev.title}
+      </div>
+    `;
+
+    row.onclick = () => {
+      openEditModal(ev);
+    };
+
+    list.appendChild(row);
+  });
+}
+
+/* =====================
+新規
+===================== */
+
+function openNewModal() {
+
+  document.getElementById("eventModalTitle").textContent = "新規予定";
+  document.getElementById("eventId").value = "";
+  document.getElementById("eventDate").value = selectedDate;
+  document.getElementById("startTime").value = "";
+  document.getElementById("endTime").value = "";
+  document.getElementById("eventTitleInput").value = "";
+  document.getElementById("eventTag").value = "other";
+  document.getElementById("eventItems").value = "";
+  document.getElementById("eventMemo").value = "";
+  document.getElementById("deleteEventBtn").style.display = "none";
+
+  document.getElementById("eventModal").style.display = "flex";
+}
+
+/* =====================
+編集
+===================== */
+
+function openEditModal(ev) {
+
+  document.getElementById("eventModalTitle").textContent = "予定編集";
+  document.getElementById("eventId").value = ev.id;
+  document.getElementById("eventDate").value = ev.event_date;
+  document.getElementById("startTime").value = ev.start_time || "";
+  document.getElementById("endTime").value = ev.end_time || "";
+  document.getElementById("eventTitleInput").value = ev.title || "";
+  document.getElementById("eventTag").value = ev.tag || "other";
+
+  document.getElementById("eventItems").value =
+    (ev.items || []).join("\n");
+
+  document.getElementById("eventMemo").value = ev.memo || "";
+
+  document.getElementById("deleteEventBtn").style.display = "inline-block";
+
+  document.getElementById("eventModal").style.display = "flex";
+}
+async function saveEvent() {
+
+  const id =
+    document.getElementById("eventId").value;
+
+  const items =
+    document.getElementById("eventItems").value
+      .split("\n")
+      .map(v => v.trim())
+      .filter(v => v);
+
+  const payload = {
+
+    title: document.getElementById("eventTitleInput").value,
+
+    tag: document.getElementById("eventTag").value,
+
+    memo: document.getElementById("eventMemo").value,
+
+    items: items,
+
+    event_date: document.getElementById("eventDate").value,
+
+    start_time:
+      document.getElementById("startTime").value || null,
+
+    end_time:
+      document.getElementById("endTime").value || null
+
+  };
+
+  let error;
+
+  if (id) {
+
+    ({ error } = await supabase
       .from("events")
-      .select("*")
-      .order("start_time", { ascending: true });
+      .update(payload)
+      .eq("id", id));
 
-    if (error) {
-      console.error("fetch error:", error);
-      return [];
-    }
+  } else {
 
-    return data || [];
-  }
-
-  // ========================================
-  // ➕ イベント追加（DB登録）
-  // ========================================
-  async function addEvent(title, tag, dateStr) {
-    const { data, error } = await supabase
+    ({ error } = await supabase
       .from("events")
-      .insert([
-        {
-          title,
-          tag,
-          start_time: dateStr,
-          end_time: dateStr,
-          items: [] // 初期持ち物
-        }
-      ])
-      .select()
-      .single();
+      .insert([payload]));
 
-    if (error) {
-      console.error("insert error:", error);
-      return null;
-    }
-
-    return data;
   }
 
-  // ========================================
-  // ✏ イベント更新（タイトル・タグ変更）
-  // ========================================
-  async function updateEvent(id, title, tag) {
-    const { error } = await supabase
-      .from("events")
-      .update({ title, tag })
-      .eq("id", id);
-
-    if (error) {
-      console.error("update error:", error);
-    }
+  if (error) {
+    console.error(error);
+    alert("保存失敗");
+    return;
   }
 
-  // ========================================
-  // 🗑 イベント削除
-  // ========================================
-  async function deleteEvent(id) {
-    const { error } = await supabase
-      .from("events")
-      .delete()
-      .eq("id", id);
+  document.getElementById("eventModal").style.display = "none";
 
-    if (error) {
-      console.error("delete error:", error);
-    }
+  calendarInstance.refetchEvents();
+
+  await openDayModal(payload.event_date);
+}
+
+/* =====================
+削除
+===================== */
+
+async function deleteEvent() {
+
+  const id =
+    document.getElementById("eventId").value;
+
+  if (!id) return;
+
+  if (!confirm("削除しますか？")) return;
+
+  const { error } = await supabase
+    .from("events")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error(error);
+    alert("削除失敗");
+    return;
   }
 
-  // ========================================
-  // 📅 カレンダーUI初期化
-  // ========================================
+  document.getElementById("eventModal").style.display = "none";
+
+  calendarInstance.refetchEvents();
+
+  await openDayModal(selectedDate);
+}
+
+/* =====================
+カレンダー初期化
+===================== */
+
+function initCalendar() {
+
   const calendarEl = document.getElementById("calendar");
 
-  const calendar = new FullCalendar.Calendar(calendarEl, {
+  const calendar = new Calendar(calendarEl, {
 
-    // 月表示スタート
+    plugins: [
+      dayGridPlugin,
+      timeGridPlugin,
+      interactionPlugin
+    ],
+
+    locale: "ja",
+
     initialView: "dayGridMonth",
 
-    // 上部メニュー
     headerToolbar: {
       left: "prev,next today",
       center: "title",
-      right: "dayGridMonth,timeGridDay"
+      right: "dayGridMonth,timeGridWeek,timeGridDay"
     },
 
-    // ========================================
-    // 📦 DBデータ → カレンダー描画変換
-    // ========================================
-    events: async function (fetchInfo, successCallback) {
+    dateClick(info) {
+      openDayModal(info.dateStr);
+    },
 
-      const events = await fetchEvents();
+    events: async (fetchInfo, success, failure) => {
 
-      successCallback(
-        events.map(e => ({
-          id: e.id,
-          title: `[${e.tag}] ${e.title}`,
-          start: e.start_time,
-          end: e.end_time,
+      const { data, error } = await supabase
+        .from("events")
+        .select("*");
 
-          // 色分け
-          backgroundColor: getTagColor(e.tag),
-          borderColor: getTagColor(e.tag),
+      if (error) {
+        failure(error);
+        return;
+      }
 
-          // 拡張データ（持ち物など）
-          extendedProps: {
-            tag: e.tag,
-            items: e.items || []
-          }
+      success(
+        (data || []).map(ev => ({
+          id: ev.id,
+          title: ev.title,
+          start: ev.start_time
+            ? `${ev.event_date}T${ev.start_time}`
+            : ev.event_date,
+          color: getTagColor(ev.tag)
         }))
       );
-    },
-
-    // ========================================
-    // 📆 日付クリック → 日ビューへ
-    // ========================================
-    dateClick: function (info) {
-      calendar.changeView("timeGridDay", info.dateStr);
-    },
-
-    // ========================================
-    // 📌 イベントクリック操作
-    // ========================================
-    eventClick: async function (info) {
-
-      const action = prompt("edit / delete / items / cancel");
-
-      if (!action || action === "cancel") return;
-
-      // 🗑 削除
-      if (action === "delete") {
-        await deleteEvent(info.event.id);
-        info.event.remove();
-        return;
-      }
-
-      // ✏ 編集
-      if (action === "edit") {
-        const title = prompt("title", info.event.title);
-        const tag = prompt("tag (work/part/health/other)", info.event.extendedProps.tag);
-
-        if (!title) return;
-
-        await updateEvent(info.event.id, title, tag);
-
-        info.event.setProp("title", `[${tag}] ${title}`);
-        info.event.setProp("backgroundColor", getTagColor(tag));
-        info.event.setProp("borderColor", getTagColor(tag));
-
-        return;
-      }
-
-      // 🎒 持ち物編集
-      if (action === "items") {
-        const current = info.event.extendedProps.items || [];
-
-        const input = prompt("items（カンマ区切り）", current.join(","));
-
-        const items = input
-          ? input.split(",").map(i => i.trim())
-          : [];
-
-        await supabase
-          .from("events")
-          .update({ items })
-          .eq("id", info.event.id);
-
-        return;
-      }
     }
+
   });
 
-  // ========================================
-  // 🚀 カレンダー起動
-  // ========================================
   calendar.render();
+  calendarInstance = calendar;
 
-  // ========================================
-  // ➕ 追加ボタン処理
-  // ========================================
-  document.getElementById("addBtn").addEventListener("click", async () => {
+  document.getElementById("newEventBtn").onclick = openNewModal;
+  document.getElementById("saveEventBtn").onclick = saveEvent;
+  document.getElementById("deleteEventBtn").onclick = deleteEvent;
 
-    const title = document.getElementById("title").value;
-    const tag = document.getElementById("tag").value;
-    const time = document.getElementById("time").value;
+  document.getElementById("closeDayModal").onclick = () => {
+    document.getElementById("dayModal").style.display = "none";
+  };
 
-    if (!title) return;
+  document.getElementById("closeEventModal").onclick = () => {
+    document.getElementById("eventModal").style.display = "none";
+  };
+}
 
-    const today = new Date().toISOString().split("T")[0];
-    const dateStr = `${today}T${time}`;
+/* =====================
+起動
+===================== */
 
-    const data = await addEvent(title, tag, dateStr);
-
-    if (!data) return;
-
-    // 再取得して最新反映
-    calendar.refetchEvents();
-  });
-
-  // ========================================
-  // 🌍 リアルタイム同期（全端末反映）
-  // ========================================
-  supabase
-    .channel("events")
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "events"
-      },
-      () => {
-        // DB変更があれば即更新
-        calendar.refetchEvents();
-      }
-    )
-    .subscribe();
-
-});
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initCalendar);
+} else {
+  initCalendar();
+}
