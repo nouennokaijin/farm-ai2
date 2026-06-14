@@ -12,6 +12,9 @@
 // ========================================
 const chatHandler = require("../handlers/chatHandler");
 
+// 🧠 ログ書き込み追加（NEW）
+const { writeLog } = require("../core/logWriter");
+
 // 💤 未実装ハンドラー（今は使わない）
 /*
 const commandHandler = require("../handlers/commandHandler");
@@ -81,11 +84,24 @@ async function dispatcher(event) {
     // 空入力
     // ====================================
     if (!text) {
-      return chatHandler({
+      const result = await chatHandler({
         ...event,
         text: "（無言入力）",
         personaId,
       });
+
+      // 🧠 LOG（NEW）
+      await writeLog({
+        session_id: event.session_id || null,
+        room_id: roomId,
+        persona_id: personaId,
+        source: event.source || "unknown",
+        speaker: "user",
+        message: "(empty input)",
+        tags: []
+      });
+
+      return result;
     }
 
     // ====================================
@@ -157,20 +173,58 @@ async function dispatcher(event) {
     // ====================================
     // 6. デフォルト（雑談）
     // ====================================
-    return chatHandler({
+
+    const result = await chatHandler({
       ...event,
       personaId,
     });
+
+    // 🧠 LOG（NEW）
+    await writeLog({
+      session_id: event.session_id || null,
+      room_id: roomId,
+      persona_id: personaId,
+      source: event.source || "unknown",
+      speaker: "user",
+      message: text,
+      tags: []
+    });
+
+    // AI応答もログ
+    await writeLog({
+      session_id: event.session_id || null,
+      room_id: roomId,
+      persona_id: personaId,
+      source: event.source || "ai",
+      speaker: "ai",
+      message: result?.message || result || "",
+      tags: []
+    });
+
+    return result;
 
   } catch (err) {
 
     console.error("🔥 Dispatcher Error:", err);
 
-    return chatHandler({
+    const fallback = await chatHandler({
       ...event,
       text: "（システム異常：雑談モードへフォールバック）",
       personaId: "system",
     });
+
+    // 🧠 ERROR LOG（NEW）
+    await writeLog({
+      session_id: event.session_id || null,
+      room_id: normalizeRoomId(event),
+      persona_id: "system",
+      source: event.source || "error",
+      speaker: "ai",
+      message: "dispatcher error fallback triggered",
+      tags: ["error"]
+    });
+
+    return fallback;
   }
 }
 

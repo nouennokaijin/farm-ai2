@@ -6,160 +6,132 @@
 // ========================================
 //
 // 🧠 SUMMARY
-// chatHandler（人格 + 会話エンジン）
+// chatHandler（会話生成エンジン / 人格思考レイヤー）
 //
-// ・会話生成
-// ・Notion長期記憶
-// ・webGateによる検索制御（重要）
-// ・searchAdapterには直接触れない
+// ・ユーザー入力の正規化
+// ・人格ごとの会話生成
+// ・Web検索判断（webGate）
+// ・短期記憶（history）
+// ・中期記憶（summary）
+// ・Notion長期記憶ロード & 要約保存
 //
-// 🎯 設計思想
-// chatHandlerは“考えるだけ”
-// 外部検索判断はすべてwebGateに委譲
-//
+// ⚠️ NOTE
+// このモジュールは「思考専用」
+// ログ保存責務は dispatcher に委譲
 // ========================================
 
-const fs = require("fs");
-const path = require("path");
+const fs = require("fs"); // ファイル読み込み用（設定・ルール取得）
+const path = require("path"); // パス解決ユーティリティ
+const groqService = require("../services/groqService"); // LLM呼び出しサービス
+const { saveMsgToNotion } = require("../utils/saveMsgToNotion"); // Notion保存（長期記憶）
+const { buildTags } = require("../utils/tagger"); // タグ生成ユーティリティ
+const { webGate } = require("../utils/webGate"); // 検索判断レイヤー
 
-const groqService = require("../services/groqService");
+const albedo = require("../personas/albedo"); // 人格：アルベド
+const demiurge = require("../personas/demiurge"); // 人格：デミウルゴス
+const shalltear = require("../personas/shalltear"); // 人格：シャルティア
 
-const { saveMsgToNotion } =
-  require("../utils/saveMsgToNotion");
-
-const { buildTags } =
-  require("../utils/tagger");
-
-// 🚪 重要：webGateのみ接続（searchAdapterは見ない）
-const { webGate } =
-  require("../utils/webGate");
-
-// ========================================
-// Personas
-// ========================================
-const albedo = require("../personas/albedo");
-const demiurge = require("../personas/demiurge");
-const shalltear = require("../personas/shalltear");
-
-// ========================================
-// Load Rules
-// ========================================
 const rules = JSON.parse(
   fs.readFileSync(
-    path.join(__dirname, "../config/chatRule.json"),
+    path.join(__dirname, "../config/chatRule.json"), // チャットルール設定読み込み
     "utf-8"
   )
 );
 
 // ========================================
-// Persona Map
+// Persona Map（人格辞書）
 // ========================================
 const personaMap = {
-  albedo,
-  demiurge,
-  shalltear,
-  system: { name: "system", systemPrompt: "" }
+  albedo, // アルベド人格
+  demiurge, // デミウルゴス人格
+  shalltear, // シャルティア人格
+  system: { name: "system", systemPrompt: "" } // システム人格（デフォルト）
 };
 
 // ========================================
-// Memory
+// Memory System（短期・中期記憶）
 // ========================================
-const histories = {};
-const summaries = {};
-const summarizingLock = {};
-const loadedMemory = {};
+const histories = {}; // 会話履歴（短期記憶）
+const summaries = {}; // 要約記憶（中期記憶）
+const summarizingLock = {}; // 要約処理の排他制御
+const loadedMemory = {}; // Notionロード済みフラグ
+
+const MAX_HISTORY = 12; // 履歴最大保持数
+const MAX_SUMMARY = 6; // 要約保持数上限
+const TRIGGER_HISTORY_SIZE = 6; // 要約トリガー閾値
+const SUMMARY_SLICE_SIZE = 3; // 要約対象スライス数
+const MAX_TOKENS = 120; // LLM最大トークン数
 
 // ========================================
-// Constants
-// ========================================
-const MAX_HISTORY = 12;
-const MAX_SUMMARY = 6;
-const TRIGGER_HISTORY_SIZE = 6;
-const SUMMARY_SLICE_SIZE = 3;
-const MAX_TOKENS = 120;
-
-
-// ========================================
-// MAIN
+// MAIN（会話生成コア）
 // ========================================
 async function chatHandler(event) {
   try {
 
-    const text = extractText(event);
-    if (!text) return;
+    const text = extractText(event); // 入力テキスト抽出
+    if (!text) return null; // 空入力は終了
 
-    const personaId = event.personaId || "system";
-    const mode = event.mode || "chat";
+    const personaId = event.personaId || "system"; // 人格ID取得
+    const mode = event.mode || "chat"; // モード取得
+    const persona = personaMap[personaId]; // 人格参照
 
-    const persona = personaMap[personaId];
+    histories[personaId] ??= []; // 履歴初期化
+    summaries[personaId] ??= []; // 要約初期化
 
-    histories[personaId] ??= [];
-    summaries[personaId] ??= [];
-
-    const history = histories[personaId];
-    const summary = summaries[personaId];
+    const history = histories[personaId]; // 履歴参照
+    const summary = summaries[personaId]; // 要約参照
 
     // ====================================
-    // Notion初回ロード
+    // Notion初回ロード（長期記憶）
     // ====================================
     if (!loadedMemory[personaId]) {
 
-      const notionMemory =
-        await loadNotionMemory(text);
+      const notionMemory = await loadNotionMemory(text); // Notion取得
 
       if (notionMemory.length > 0) {
-        summary.push(...notionMemory);
+        summary.push(...notionMemory); // 要約へ統合
       }
 
-      loadedMemory[personaId] = true;
+      loadedMemory[personaId] = true; // ロード済みフラグ
     }
 
-    // ====================================
-    // 入力処理
-    // ====================================
-    const normalizedText =
-      applyNameRules(text, rules);
+    const normalizedText = applyNameRules(text, rules); // 名前ルール適用
 
-    push(history, {
-      role: "user",
-      content: normalizedText
-    });
+    push(history, { role: "user", content: normalizedText }); // 履歴にユーザー追加
 
     // ====================================
-    // 🚪 WEB GATE（ここが唯一の検索判断点）
+    // webGate（検索判断）
     // ====================================
-
     const webContext = await webGate(normalizedText, {
       history,
       summary
     });
 
-    const webResult =
-      formatWebResult(webContext);
+    const webResult = formatWebResult(webContext); // 検索結果整形
 
     // ====================================
-    // 要約処理
+    // 要約処理（中期記憶生成）
     // ====================================
     if (
       history.length > TRIGGER_HISTORY_SIZE &&
       !summarizingLock[personaId]
     ) {
 
-      summarizingLock[personaId] = true;
+      summarizingLock[personaId] = true; // ロック開始
 
-      const old = history.splice(0, SUMMARY_SLICE_SIZE);
+      const old = history.splice(0, SUMMARY_SLICE_SIZE); // 古い履歴を切り出し
 
       try {
 
-        const s = await summarize(old, personaId);
-        summary.push(s);
+        const s = await summarize(old, personaId); // 要約生成
+        summary.push(s); // 要約保存
 
-        const tags = await buildTags({
+        const tags = await buildTags({ // タグ生成
           text: s,
           type: "チャット"
         });
 
-        await saveMsgToNotion({
+        await saveMsgToNotion({ // Notion保存
           title: `${personaId} memory`,
           content: s,
           userText: s,
@@ -167,82 +139,56 @@ async function chatHandler(event) {
         });
 
         if (summary.length > MAX_SUMMARY) {
-          summary.shift();
+          summary.shift(); // 古い要約削除
         }
 
       } finally {
-        summarizingLock[personaId] = false;
+        summarizingLock[personaId] = false; // ロック解除
       }
     }
 
     // ====================================
-    // Prompt
+    // Prompt構築
     // ====================================
-    const systemPrompt =
-      buildSystemPrompt(persona, summary, mode);
-
-    const recent = history.slice(-5);
+    const systemPrompt = buildSystemPrompt(persona, summary, mode); // システムプロンプト生成
+    const recent = history.slice(-5); // 直近履歴取得
 
     const userPrompt = buildUserPrompt({
       summary,
       recent,
       text: normalizedText,
       webResult
-    });
+    }); // ユーザープロンプト生成
 
     // ====================================
-    // AI
+    // AI呼び出し
     // ====================================
-    const responseRaw =
-      await groqService.chat({
-        system: systemPrompt,
-        user: userPrompt,
-        max_tokens: MAX_TOKENS
-      });
+    const responseRaw = await groqService.chat({
+      system: systemPrompt,
+      user: userPrompt,
+      max_tokens: MAX_TOKENS
+    });
 
     push(history, {
       role: "assistant",
-      content: responseRaw
+      content: responseRaw // AI応答を履歴に追加
     });
 
-    await safeReply(event, responseRaw);
+    // ⚠️ ログはここでは書かない（dispatcher責務）
+
+    return responseRaw; // 応答返却
 
   } catch (err) {
-    console.error("[ERROR] chatHandler", err);
+    console.error("[ERROR] chatHandler", err); // エラー出力
+    return null; // フォールバック
   }
 }
 
-
 // ========================================
-// 🌐 webGate結果フォーマット
-// ========================================
-
-function formatWebResult(webContext) {
-
-  if (!webContext) return "none";
-
-  return `
-# WEB SEARCH
-searched: ${webContext.searched}
-score: ${webContext.score}
-reason: ${webContext.reason}
-
-${webContext.data?.results
-  ? webContext.data.results
-      .map(r =>
-        `🔹 ${r.title}\n${r.snippet}\n${r.url}`
-      )
-      .join("\n\n")
-  : "no results"}
-`.trim();
-}
-
-
-// ========================================
-// 🔧 以下は元のまま
+// 🔧 Utility Functions
 // ========================================
 
-function extractText(event) {
+function extractText(event) { // 入力抽出
   if (!event) return "";
   if (typeof event === "string") return event;
 
@@ -255,8 +201,7 @@ function extractText(event) {
   );
 }
 
-function applyNameRules(text, rules) {
-
+function applyNameRules(text, rules) { // 名前ルール適用
   const g = rules.global_rules || {};
   const nameRules = rules.name_rules || {};
   const honorific = g.honorific || { default: "" };
@@ -270,8 +215,7 @@ function applyNameRules(text, rules) {
   return normalized;
 }
 
-function buildSystemPrompt(persona, summary, mode) {
-
+function buildSystemPrompt(persona, summary, mode) { // システムプロンプト生成
   const modeRule = rules.modes?.[mode] || rules.modes.chat;
 
   return `
@@ -289,13 +233,7 @@ max_chars=${modeRule.max_length_chars || 80}
 `.trim();
 }
 
-function buildUserPrompt({
-  summary,
-  recent,
-  text,
-  webResult
-}) {
-
+function buildUserPrompt({ summary, recent, text, webResult }) { // ユーザープロンプト生成
   return `
 # MEMORY
 ${summary.join("\n")}
@@ -311,11 +249,8 @@ ${text}
 `.trim();
 }
 
-async function summarize(messages, personaId) {
-
-  const text = messages
-    .map(m => `[${m.role}] ${m.content}`)
-    .join("\n");
+async function summarize(messages, personaId) { // 要約生成
+  const text = messages.map(m => `[${m.role}] ${m.content}`).join("\n");
 
   const result = await groqService.chat({
     system: "会話を3〜5行で要約。事実のみ。",
@@ -326,10 +261,8 @@ async function summarize(messages, personaId) {
   return `[${personaId}] ${result}`;
 }
 
-async function loadNotionMemory(query) {
-
+async function loadNotionMemory(query) { // Notion長期記憶ロード
   try {
-
     const axios = require("axios");
 
     const res = await axios.post(
@@ -356,16 +289,7 @@ async function loadNotionMemory(query) {
   }
 }
 
-async function safeReply(event, text) {
-
-  if (!text) return;
-
-  if (event.reply) return await event.reply(text);
-  if (event.channel?.send) return await event.channel.send(text);
-}
-
-function push(arr, msg) {
-
+function push(arr, msg) { // 履歴追加（上限管理付き）
   arr.push({ ...msg, timestamp: Date.now() });
 
   if (arr.length > MAX_HISTORY) {
@@ -373,11 +297,10 @@ function push(arr, msg) {
   }
 }
 
-function format(list) {
-
+function format(list) { // 履歴フォーマット
   return list
     .map(m => `[${m.role}] ${m.content}`)
     .join("\n");
 }
 
-module.exports = chatHandler;
+module.exports = chatHandler; // モジュール公開
