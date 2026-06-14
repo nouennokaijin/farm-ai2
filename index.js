@@ -1,6 +1,6 @@
 // ========================================
-// index.js
-// 2026/05/29
+// 📁 index.js
+// 📅 2026/05/29
 // 🚀 AI Multi Gateway Boot (Control Center)
 // Okiura Kazuo
 // ========================================
@@ -12,8 +12,7 @@
 // ・処理ロジックは持たず「起動のみ」担当
 //
 // 🌐 現在のWeb機能
-// ・Nazarick Calendar
-// ・Nazarick Library
+// ・Nazarick統合Web（index.html）
 //
 // 🔮 将来拡張予定
 // ・HQ（司令室）
@@ -31,7 +30,6 @@ const path = require("path");
 const talkRouter =
 require("./server/routes/talk");
 
-
 // ========================================
 // 🌐 Web Server 初期化
 // ========================================
@@ -44,9 +42,6 @@ console.log("=================================");
 
 // ========================================
 // 🧠 安全起動ラッパー
-// ========================================
-// モジュール起動失敗時でも全体停止しない設計
-// 将来的に複数Gatewayを追加しても安全
 // ========================================
 function safeStart(name, modulePath) {
 try {
@@ -77,14 +72,8 @@ safeStart("Discord Gateway", "./index.discord.js");
 // web フォルダ全体を静的配信
 //
 // 現在
-// ・/calendar
-// ・/library
+// ・統合Web（index.html）
 //
-// 将来
-// ・/hq
-// ・/meeting
-// ・/farm
-// などを追加予定
 // ========================================
 app.use(express.json());
 app.use(express.static("web"));
@@ -94,59 +83,20 @@ app.use(
     talkRouter
 );
 
-
 // ========================================
-// 📅 カレンダールート
+// 🌐 統合Webルート
 // ========================================
-// Nazarick Calendar
+// Nazarick Unified Web
 //
 // URL
-// /calendar
+// /index.html または /
 //
-// 配信先
-// web/calendar/index.html
-//
-// 担当
-// シャルティア
 // ========================================
-app.get("/calendar", (req, res) => {
+app.get("/", (req, res) => {
 res.sendFile(
 path.join(
 __dirname,
 "web",
-"calendar",
-"index.html"
-)
-);
-});
-
-// ========================================
-// 📚 ナザリック知識庫ルート
-// ========================================
-// Nazarick Library
-//
-// URL
-// /library
-//
-// 配信先
-// web/library/index.html
-//
-// 担当
-// ユリ・アルファ
-//
-// 役割
-// ・知識登録
-// ・知識検索
-// ・URL保存
-// ・会議資料保存
-// ・会議結果保存
-// ========================================
-app.get("/library", (req, res) => {
-res.sendFile(
-path.join(
-__dirname,
-"web",
-"library",
 "index.html"
 )
 );
@@ -160,22 +110,8 @@ __dirname,
 // URL
 // /
 //
-// 正常時
-// 🟢 AI Gateway Alive
 // ========================================
-app.get("/", (req, res) => {
-res.send("🟢 AI Gateway Alive");
-});
-
-// ========================================
-// 🔌 API状態確認
-// ========================================
-// 将来の外部連携確認用
-//
-// URL
-// /api/status
-// ========================================
-app.get("/api/status", (req, res) => {
+app.get("/health", (req, res) => {
 res.json({
 status: "ok",
 service: "AI Gateway",
@@ -189,9 +125,8 @@ time: new Date().toISOString(),
 app.listen(PORT, () => {
 console.log("=================================");
 console.log("🌐 Web Server running on port ${PORT}");
-console.log("📅 Calendar : /calendar");
-console.log("📚 Library  : /library");
-console.log("❤️ Health   : /");
+console.log("🌐 Unified Web : /");
+console.log("❤️ Health     : /health");
 console.log("=================================");
 });
 
@@ -204,9 +139,6 @@ console.log("=================================");
 
 // ========================================
 // 💓 生存監視（Heartbeat）
-// ========================================
-// 1分ごとに生存確認ログを出力
-// Renderログ監視用
 // ========================================
 setInterval(() => {
 console.log("💓 AI GATEWAY HEARTBEAT OK");
