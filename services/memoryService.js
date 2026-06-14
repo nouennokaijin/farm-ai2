@@ -124,14 +124,27 @@ async function run({
   });
 
   // ====================================
-  // Log
+  // LOG DISABLED
+  // 2026-06-14
+  // 二重ログ防止のため無効化
+  //
+  // 現在の会話ログ保存は
+  // dispatcher → writeLog()
+  // が唯一の保存経路とする。
+  //
+  // memoryServiceは
+  // 「会話生成専用」
+  // に責務を限定する。
   // ====================================
+
+  /*
   await LogUnit.write({
     sessionId,
     personaId,
     user: normalizedText,
     assistant: responseRaw
   });
+  */
 
   return responseRaw;
 }
