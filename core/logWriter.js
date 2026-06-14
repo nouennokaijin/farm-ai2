@@ -1,38 +1,63 @@
 // core/logWriter.js
+// フォルダ: core
+// ファイル: logWriter.js
+// 概要: Supabaseへ会話ログを書き込む
+// 日付: 2026-06-14
+// OKIURA　KAZUO
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js"; // Supabaseクライアント生成ライブラリの読み込み
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
+// ======================================
+// 🔧 Supabase固定設定（Render環境依存を排除）
+// ======================================
+
+const SUPABASE_URL =
+  "https://stgaqwmdhnddqayqmedi.supabase.co"; // SupabaseプロジェクトURL固定値
+
+const SUPABASE_KEY =
+  "sb_publishable_cabU7_5aabCnGMdXAvitNw_VsX6JhKk"; // Supabase公開キー（認証用）
+
+// Supabase client
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY); // Supabase接続インスタンス生成
+
+// ======================================
+// 📝 ログ書き込み関数
+// ======================================
 
 export async function writeLog({
-  session_id = null,
-  room_id,
-  persona_id,
-  source,
-  speaker, // "user" | "ai"
-  message,
-  tags = []
+  session_id = null, // 会話セッションID
+  room_id, // ルームID（必須）
+  persona_id, // AI人格ID
+  source, // 送信元情報
+  speaker, // "user" | "ai" 発話者種別
+  message, // メッセージ本文
+  tags = [] // タグ配列
 }) {
-  const { error } = await supabase
-    .from("conversation_logs")
-    .insert([
-      {
-        session_id,
-        room_id,
-        persona_id,
-        source,
-        speaker,
-        message,
-        tags
-      }
-    ]);
+  try { // 例外防止ラップ開始
 
-  if (error) {
-    console.error("LOG WRITE ERROR:", error);
+    const { error } = await supabase // Supabaseへinsert実行
+      .from("conversation_logs") // 対象テーブル
+      .insert([
+        {
+          session_id, // セッションID保存
+          room_id, // ルームID保存
+          persona_id, // 人格ID保存
+          source, // 送信元保存
+          speaker, // 発話者保存
+          message, // メッセージ保存
+          tags // タグ保存
+        }
+      ]);
+
+    if (error) { // Supabase側エラー処理
+      console.error("LOG WRITE ERROR:", error); // エラーログ出力
+      return false; // 失敗返却
+    }
+
+    return true; // 成功返却
+
+  } catch (err) { // 予期せぬ例外処理
+    console.error("LOG WRITE EXCEPTION:", err); // 例外ログ出力
+    return false; // 失敗返却
   }
-
-  return !error;
 }
