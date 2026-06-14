@@ -28,9 +28,9 @@ const dispatcher = require("./core/dispatcher");
 // ========================================
 
 const personas = {
-  albedo: require("./personas/albedo"),
-  demiurge: require("./personas/demiurge"),
-  shalltear: require("./personas/shalltear"),
+albedo: require("./personas/albedo"),
+demiurge: require("./personas/demiurge"),
+shalltear: require("./personas/shalltear"),
 };
 
 // ========================================
@@ -44,70 +44,80 @@ function createBotClient(botName, token, persona) {
 // クライアント生成
 // ========================================
 
-  const client = new Client({
-    intents: [
-      GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.MessageContent,
-    ],
-  });
+const client = new Client({
+intents: [
+GatewayIntentBits.Guilds,
+GatewayIntentBits.GuildMessages,
+GatewayIntentBits.MessageContent,
+],
+});
 
 // ========================================
 // 起動ログ
 // ========================================
 
-  client.once("clientReady", () => {
+client.once("clientReady", () => {
 
-    console.log("================================");
-    console.log(`${botName} 起動完了`);
-    console.log(`ログイン: ${client.user.tag}`);
-    console.log(`人格: ${persona.name}`);
-    console.log("================================");
+console.log("================================");
+console.log(`${botName} 起動完了`);
+console.log(`ログイン: ${client.user.tag}`);
+console.log(`人格: ${persona.name}`);
+console.log("================================");
 
-  });
+});
 
 // ========================================
 // メッセージ受信
 // ========================================
 
-  client.on("messageCreate", async (message) => {
+client.on("messageCreate", async (message) => {
 
-    try {
+try {
 
 // ========================================
 // Bot無視
 // ========================================
 
-      if (message.author.bot) return;
+  if (message.author.bot) return;
 
 // ========================================
 // Dispatcherへ送信
 // ========================================
 
-      await dispatcher({
-        text: message.content,
-        persona,
-        reply: message.reply.bind(message),
-        channel: message.channel,
-        author: message.author,
-      });
+  await dispatcher({
+    text: message.content,
+    persona,
+    reply: message.reply.bind(message),
+    channel: message.channel,
 
-    } catch (err) {
+    // ========================================
+    // FIX 2026-06-14
+    // room_idへDiscord Channelオブジェクト全体が
+    // 保存される不具合対策
+    // channel.idを明示的に渡す
+    // ========================================
+    channelId: message.channel.id,
 
-      console.error(`${botName} Error:`, err);
-
-      try {
-        await message.reply("エラーが発生しました。");
-      } catch {}
-
-    }
+    author: message.author,
   });
+
+} catch (err) {
+
+  console.error(`${botName} Error:`, err);
+
+  try {
+    await message.reply("エラーが発生しました。");
+  } catch {}
+
+}
+
+});
 
 // ========================================
 // Discordログイン
 // ========================================
 
-  client.login(token);
+client.login(token);
 }
 
 // ========================================
@@ -115,9 +125,9 @@ function createBotClient(botName, token, persona) {
 // ========================================
 
 createBotClient(
-  "ALBEDO BOT",
-  process.env.DISCORD_TOKEN,
-  personas.albedo
+"ALBEDO BOT",
+process.env.DISCORD_TOKEN,
+personas.albedo
 );
 
 // ========================================
@@ -125,9 +135,9 @@ createBotClient(
 // ========================================
 
 createBotClient(
-  "DEMIURGE BOT",
-  process.env.DEMIURGE_DISCORD_TOKEN,
-  personas.demiurge
+"DEMIURGE BOT",
+process.env.DEMIURGE_DISCORD_TOKEN,
+personas.demiurge
 );
 
 // ========================================
@@ -136,7 +146,7 @@ createBotClient(
 // ========================================
 
 createBotClient(
-  "SHALLTEAR BOT",
-  process.env.SHALLTEAR_DISCORD_TOKEN,
-  personas.shalltear
+"SHALLTEAR BOT",
+process.env.SHALLTEAR_DISCORD_TOKEN,
+personas.shalltear
 );

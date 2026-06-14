@@ -52,6 +52,13 @@ async function chatHandler(event) {
     // ====================================
     await safeReply(event, responseRaw);
 
+    // ====================================
+    // FIX 2026-06-14
+    // dispatcher側のAIログ保存で
+    // 応答本文を利用できるよう返却する
+    // ====================================
+    return responseRaw;
+
   } catch (err) {
     console.error("[ERROR] chatHandler", err);
   }
