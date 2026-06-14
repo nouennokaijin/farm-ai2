@@ -1,3 +1,12 @@
+// ========================================
+// 📁 FOLDER : server/routes
+// 📄 FILE : talk.js
+// 📋 PURPOSE : Webチャットからの会話を受信し、
+//              dispatcher経由でAIへ渡すAPIルート
+// 📅 DATE : 2026-06-14
+// 👤 AUTHOR : OKIURA KAZUO
+// ========================================
+
 const express =
 require("express");
 
@@ -11,43 +20,52 @@ router.post(
 "/",
 async (req,res)=>{
 
-    try{
+try{
 
-        const text =
-        req.body.message || "";
+    const text =
+    req.body.message || "";
 
-        let aiReply = "";
+    let aiReply = "";
 
-        await dispatcher({
+    await dispatcher({
 
-            text,
+        text,
 
-            channelId:
-            "1507420557266780323",
+        // ====================================
+        // WEB経由であることを明示
+        // conversation_logs の source に
+        // "web" が保存される
+        // ====================================
+        source:
+        "web",
 
-            reply:async(message)=>{
+        channelId:
+        "1507420557266780323",
 
-                aiReply =
-                message;
-            }
-        });
+        reply:async(message)=>{
 
-        res.json({
-            success:true,
-            reply:aiReply
-        });
+            aiReply =
+            message;
+        }
+    });
 
-    }
-    catch(err){
+    res.json({
+        success:true,
+        reply:aiReply
+    });
 
-        console.error(err);
+}
+catch(err){
 
-        res.status(500).json({
-            success:false,
-            reply:
-            "アルベドとの通信に失敗しました"
-        });
-    }
+    console.error(err);
+
+    res.status(500).json({
+        success:false,
+        reply:
+        "アルベドとの通信に失敗しました"
+    });
+}
+
 });
 
 module.exports =
