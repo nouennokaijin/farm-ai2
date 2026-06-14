@@ -5,7 +5,7 @@
 // 日付: 2026-06-14
 // OKIURA　KAZUO
 
-import { createClient } from "@supabase/supabase-js"; // Supabaseクライアント生成ライブラリの読み込み
+const { createClient } = require("@supabase/supabase-js"); // ←修正: ESM→CJS統一
 
 // ======================================
 // 🔧 Supabase固定設定（Render環境依存を排除）
@@ -24,7 +24,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY); // Supabase接続イ�
 // 📝 ログ書き込み関数
 // ======================================
 
-export async function writeLog({
+async function writeLog({
   session_id = null, // 会話セッションID
   room_id, // ルームID（必須）
   persona_id, // AI人格ID
@@ -61,3 +61,5 @@ export async function writeLog({
     return false; // 失敗返却
   }
 }
+
+module.exports = { writeLog }; // ←修正: CJS統一
