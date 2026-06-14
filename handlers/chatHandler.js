@@ -223,19 +223,34 @@ async function chatHandler(event) {
       content: responseRaw
     });
 
-    // ====================================
-    // 🆕 ADDED: Supabase会話ログ保存
-    // ====================================
+    // ========================================
+    // 🆕 Supabase会話ログ保存（DBスキーマ準拠）
+    // ========================================
     try {
+
+      // userログ
+      await supabase
+        .from("conversation_logs")
+        .insert([
+          {
+            room_id: "albedo_room",
+            persona_id: personaId,
+            source: "chatHandler",
+            speaker: "user",
+            message: normalizedText
+          }
+        ]);
+
+      // aiログ
       const { error } = await supabase
         .from("conversation_logs")
         .insert([
           {
+            room_id: "albedo_room",
             persona_id: personaId,
-            user_message: normalizedText,
-            ai_message: responseRaw,
-            mode: mode,
-            created_at: new Date().toISOString()
+            source: "chatHandler",
+            speaker: "ai",
+            message: responseRaw
           }
         ]);
 
