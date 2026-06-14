@@ -45,10 +45,20 @@ async function writeLog({
           source, // 送信元保存
           speaker, // 発話者保存
           message, // メッセージ保存
-          tags, // タグ保存
-          created_at: new Date().toISOString() // 🔥追加: 明示的タイムスタンプ統一
+          tags // タグ保存
         }
       ]);
+
+    // ======================================
+    // FIX 2026-06-14
+    // created_at削除
+    //
+    // DB側の
+    // created_at DEFAULT now()
+    // を正とする
+    //
+    // アプリ側時刻とのズレ防止
+    // ======================================
 
     if (error) { // Supabase側エラー処理
       console.error("LOG WRITE ERROR:", error); // エラーログ出力
