@@ -39,10 +39,18 @@ const { webGate } =
 // ========================================
 const { createClient } = require("@supabase/supabase-js");
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// ======================================
+// 🔧 Supabase固定設定（Render環境依存を排除）
+// ======================================
+
+const SUPABASE_URL =
+  "https://wtipmrssyutdyuuhokcn.supabase.co"; // SupabaseプロジェクトURL固定値
+
+const SUPABASE_KEY =
+  "sb_publishable_cWZyPK5GVOZKODDP9ozINQ_vdxZWxoc"; // Supabase公開キー（認証用）
+
+// Supabase client
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY); // Supabase接続インスタンス生成
 
 // ========================================
 // Personas
