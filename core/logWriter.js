@@ -45,7 +45,8 @@ async function writeLog({
           source, // 送信元保存
           speaker, // 発話者保存
           message, // メッセージ保存
-          tags // タグ保存
+          tags, // タグ保存
+          created_at: new Date().toISOString() // 🔥追加: 明示的タイムスタンプ統一
         }
       ]);
 
