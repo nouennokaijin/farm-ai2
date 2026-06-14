@@ -12,10 +12,10 @@ import { createClient } from "@supabase/supabase-js"; // Supabaseクライアン
 // ======================================
 
 const SUPABASE_URL =
-  "https://stgaqwmdhnddqayqmedi.supabase.co"; // SupabaseプロジェクトURL固定値
+  "https://wtipmrssyutdyuuhokcn.supabase.co"; // SupabaseプロジェクトURL固定値
 
 const SUPABASE_KEY =
-  "sb_publishable_cabU7_5aabCnGMdXAvitNw_VsX6JhKk"; // Supabase公開キー（認証用）
+  "sb_publishable_cWZyPK5GVOZKODDP9ozINQ_vdxZWxoc"; // Supabase公開キー（認証用）
 
 // Supabase client
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY); // Supabase接続インスタンス生成
