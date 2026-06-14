@@ -1,56 +1,47 @@
 // ========================================
 // 📁 FOLDER : handlers
-// 📄 FILE : chatHandler.js
-// 📅 DATE : 2026-05-31
+// 📄 FILE : chatHandler.js (TEST MODE)
+// 📅 DATE : 2026-06-14
 // 👤 AUTHOR : OKIURA KAZUO
 // ========================================
 //
-// 🧠 SUMMARY
-// chatHandler（人格 + 会話エンジン）
-//
-// ・入力受付のみ
-// ・memoryServiceへ処理委譲
-// ・返信送信
-//
-// 🎯 設計思想
-// chatHandlerは“入口と出口だけ”
-// ロジックはすべてservicesへ移譲
+// 🧪 TEST MODE
+// ・memoryService完全バイパス
+// ・固定レスポンス返却
+// ・疎通確認専用
 //
 // ========================================
-
-const memoryService = require("../services/memoryService");
 
 // ========================================
 // MAIN
 // ========================================
 async function chatHandler(event) {
   try {
+    console.log("[TEST] chatHandler triggered");
+
     const text = extractText(event);
-    if (!text) return;
+    console.log("[TEST] received text:", text);
 
-    const personaId = event.personaId || "system";
-    const mode = event.mode || "chat";
-
+    const personaId = event?.personaId || "system";
     const sessionId =
-      event.session_id ||
-      event.channelId ||
+      event?.session_id ||
+      event?.channelId ||
       "default";
 
+    console.log("[TEST] sessionId:", sessionId);
+    console.log("[TEST] personaId:", personaId);
+
     // ====================================
-    // 🧠 Core Pipeline（全処理委譲）
+    // 🧪 FIXED RESPONSE ONLY
     // ====================================
-    const responseRaw = await memoryService.run({
-      text,
-      personaId,
-      mode,
-      sessionId,
-      event
-    });
+    const responseRaw = "こんにちわ";
 
     // ====================================
     // Reply
     // ====================================
     await safeReply(event, responseRaw);
+
+    console.log("[TEST] reply sent");
 
   } catch (err) {
     console.error("[ERROR] chatHandler", err);
@@ -58,9 +49,8 @@ async function chatHandler(event) {
 }
 
 // ========================================
-// Utils（変更なし）
+// Utils
 // ========================================
-
 function extractText(event) {
   if (!event) return "";
   if (typeof event === "string") return event;
@@ -79,6 +69,8 @@ async function safeReply(event, text) {
 
   if (event.reply) return await event.reply(text);
   if (event.channel?.send) return await event.channel.send(text);
+
+  console.log("[WARN] No reply method found. Output:", text);
 }
 
 module.exports = chatHandler;
