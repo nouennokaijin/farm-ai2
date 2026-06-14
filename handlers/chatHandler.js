@@ -30,13 +30,9 @@ const { saveMsgToNotion } =
 const { buildTags } =
   require("../utils/tagger");
 
-// 🚪 重要：webGateのみ接続（searchAdapterは見ない）
 const { webGate } =
   require("../utils/webGate");
 
-// ========================================
-// 🆕 ADDED: Supabaseログ用クライアント
-// ========================================
 const { createClient } = require("@supabase/supabase-js");
 
 // ======================================
@@ -44,13 +40,12 @@ const { createClient } = require("@supabase/supabase-js");
 // ======================================
 
 const SUPABASE_URL =
-  "https://wtipmrssyutdyuuhokcn.supabase.co"; // SupabaseプロジェクトURL固定値
+  "https://wtipmrssyutdyuuhokcn.supabase.co";
 
 const SUPABASE_KEY =
-  "sb_publishable_cWZyPK5GVOZKODDP9ozINQ_vdxZWxoc"; // Supabase公開キー（認証用）
+  "sb_publishable_cWZyPK5GVOZKODDP9ozINQ_vdxZWxoc";
 
-// Supabase client
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY); // Supabase接続インスタンス生成
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ========================================
 // Personas
@@ -80,12 +75,10 @@ const personaMap = {
 };
 
 // ========================================
-// Memory
+// Memory（🔥 修正ポイント）
+// session単位で状態を分離する
 // ========================================
-const histories = {};
-const summaries = {};
-const summarizingLock = {};
-const loadedMemory = {};
+const sessions = new Map();
 
 // ========================================
 // Constants
@@ -95,7 +88,6 @@ const MAX_SUMMARY = 6;
 const TRIGGER_HISTORY_SIZE = 6;
 const SUMMARY_SLICE_SIZE = 3;
 const MAX_TOKENS = 120;
-
 
 // ========================================
 // MAIN
@@ -111,16 +103,36 @@ async function chatHandler(event) {
 
     const persona = personaMap[personaId];
 
-    histories[personaId] ??= [];
-    summaries[personaId] ??= [];
+    // ========================================
+    // 🔥 修正ポイント：session分離
+    // event単位ではなく room / channel / sessionで分離
+    // ========================================
+    const sessionId =
+      event.session_id ||
+      event.channelId ||
+      "default";
 
-    const history = histories[personaId];
-    const summary = summaries[personaId];
+    if (!sessions.has(sessionId)) {
+      sessions.set(sessionId, {
+        histories: {},
+        summaries: {},
+        summarizingLock: {},
+        loadedMemory: {}
+      });
+    }
+
+    const session = sessions.get(sessionId);
+
+    session.histories[personaId] ??= [];
+    session.summaries[personaId] ??= [];
+
+    const history = session.histories[personaId];
+    const summary = session.summaries[personaId];
 
     // ====================================
     // Notion初回ロード
     // ====================================
-    if (!loadedMemory[personaId]) {
+    if (!session.loadedMemory[personaId]) {
 
       const notionMemory =
         await loadNotionMemory(text);
@@ -129,7 +141,7 @@ async function chatHandler(event) {
         summary.push(...notionMemory);
       }
 
-      loadedMemory[personaId] = true;
+      session.loadedMemory[personaId] = true;
     }
 
     // ====================================
@@ -144,9 +156,8 @@ async function chatHandler(event) {
     });
 
     // ====================================
-    // 🚪 WEB GATE（ここが唯一の検索判断点）
+    // WEB GATE
     // ====================================
-
     const webContext = await webGate(normalizedText, {
       history,
       summary
@@ -160,10 +171,10 @@ async function chatHandler(event) {
     // ====================================
     if (
       history.length > TRIGGER_HISTORY_SIZE &&
-      !summarizingLock[personaId]
+      !session.summarizingLock[personaId]
     ) {
 
-      summarizingLock[personaId] = true;
+      session.summarizingLock[personaId] = true;
 
       const old = history.splice(0, SUMMARY_SLICE_SIZE);
 
@@ -189,7 +200,7 @@ async function chatHandler(event) {
         }
 
       } finally {
-        summarizingLock[personaId] = false;
+        session.summarizingLock[personaId] = false;
       }
     }
 
@@ -224,24 +235,20 @@ async function chatHandler(event) {
     });
 
     // ========================================
-    // 🆕 Supabase会話ログ保存（DBスキーマ準拠）
+    // Supabase log
     // ========================================
     try {
 
-      // userログ
-      await supabase
-        .from("conversation_logs")
-        .insert([
-          {
-            room_id: "albedo_room",
-            persona_id: personaId,
-            source: "chatHandler",
-            speaker: "user",
-            message: normalizedText
-          }
-        ]);
+      await supabase.from("conversation_logs").insert([
+        {
+          room_id: "albedo_room",
+          persona_id: personaId,
+          source: "chatHandler",
+          speaker: "user",
+          message: normalizedText
+        }
+      ]);
 
-      // aiログ
       const { error } = await supabase
         .from("conversation_logs")
         .insert([
@@ -271,13 +278,11 @@ async function chatHandler(event) {
   }
 }
 
-
 // ========================================
-// 🌐 webGate結果フォーマット
+// 以下変更なし
 // ========================================
 
 function formatWebResult(webContext) {
-
   if (!webContext) return "none";
 
   return `
@@ -296,11 +301,6 @@ ${webContext.data?.results
 `.trim();
 }
 
-
-// ========================================
-// 🔧 以下は元のまま
-// ========================================
-
 function extractText(event) {
   if (!event) return "";
   if (typeof event === "string") return event;
@@ -315,7 +315,6 @@ function extractText(event) {
 }
 
 function applyNameRules(text, rules) {
-
   const g = rules.global_rules || {};
   const nameRules = rules.name_rules || {};
   const honorific = g.honorific || { default: "" };
@@ -330,7 +329,6 @@ function applyNameRules(text, rules) {
 }
 
 function buildSystemPrompt(persona, summary, mode) {
-
   const modeRule = rules.modes?.[mode] || rules.modes.chat;
 
   return `
@@ -354,7 +352,6 @@ function buildUserPrompt({
   text,
   webResult
 }) {
-
   return `
 # MEMORY
 ${summary.join("\n")}
@@ -371,7 +368,6 @@ ${text}
 }
 
 async function summarize(messages, personaId) {
-
   const text = messages
     .map(m => `[${m.role}] ${m.content}`)
     .join("\n");
@@ -386,9 +382,7 @@ async function summarize(messages, personaId) {
 }
 
 async function loadNotionMemory(query) {
-
   try {
-
     const axios = require("axios");
 
     const res = await axios.post(
@@ -416,7 +410,6 @@ async function loadNotionMemory(query) {
 }
 
 async function safeReply(event, text) {
-
   if (!text) return;
 
   if (event.reply) return await event.reply(text);
@@ -424,7 +417,6 @@ async function safeReply(event, text) {
 }
 
 function push(arr, msg) {
-
   arr.push({ ...msg, timestamp: Date.now() });
 
   if (arr.length > MAX_HISTORY) {
@@ -433,7 +425,6 @@ function push(arr, msg) {
 }
 
 function format(list) {
-
   return list
     .map(m => `[${m.role}] ${m.content}`)
     .join("\n");
