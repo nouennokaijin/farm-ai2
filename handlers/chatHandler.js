@@ -35,6 +35,16 @@ const { webGate } =
   require("../utils/webGate");
 
 // ========================================
+// 🆕 ADDED: Supabaseログ用クライアント
+// ========================================
+const { createClient } = require("@supabase/supabase-js");
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// ========================================
 // Personas
 // ========================================
 const albedo = require("../personas/albedo");
@@ -204,6 +214,32 @@ async function chatHandler(event) {
       role: "assistant",
       content: responseRaw
     });
+
+    // ====================================
+    // 🆕 ADDED: Supabase会話ログ保存
+    // ====================================
+    try {
+      const { error } = await supabase
+        .from("conversation_logs")
+        .insert([
+          {
+            persona_id: personaId,
+            user_message: normalizedText,
+            ai_message: responseRaw,
+            mode: mode,
+            created_at: new Date().toISOString()
+          }
+        ]);
+
+      if (error) {
+        console.error("❌ Supabase insert error:", error);
+      } else {
+        console.log("✅ conversation_logs saved");
+      }
+
+    } catch (err) {
+      console.error("❌ Supabase crash:", err);
+    }
 
     await safeReply(event, responseRaw);
 
