@@ -15,6 +15,23 @@ const chatHandler = require("../handlers/chatHandler");
 // 🧠 ログ書き込み追加（NEW）
 const { writeLog } = require("../core/logWriter");
 
+// 🧼 ★追加：入力正規化（入口統一レイヤー）
+// Discord / LINE / Webhook などの差異をここで吸収する
+function normalizeEvent(event) {
+  return {
+    ...event,
+
+    // テキスト統一（複数ソース対応）
+    text: (event.text || event.content || event.message || "").trim(),
+
+    // room系統のゆれ吸収（後段normalizeRoomIdと整合）
+    channelId: event.channelId || event.channel_id || event.channel || event.room || event.guildId || event.room_id || "",
+
+    // sourceが未定義の場合の補完
+    source: event.source || "discord",
+  };
+}
+
 // 💤 未実装ハンドラー（今は使わない）
 /*
 const commandHandler = require("../handlers/commandHandler");
@@ -58,6 +75,9 @@ function normalizeRoomId(event) {
 async function dispatcher(event) {
   try {
 
+    // 🧼 ★追加：ここで必ずイベントを正規化（入口統一）
+    event = normalizeEvent(event);
+
     const text = (event.text || "").trim();
 
     // ====================================
@@ -78,6 +98,7 @@ async function dispatcher(event) {
     console.log("ROOM ID:", roomId);
     console.log("PERSONA ID:", personaId);
     console.log("TEXT:", text);
+    console.log("SOURCE:", event.source);
     console.log("================================");
 
     // ====================================
