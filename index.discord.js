@@ -31,6 +31,16 @@ const personas = {
 albedo: require("./personas/albedo"),
 demiurge: require("./personas/demiurge"),
 shalltear: require("./personas/shalltear"),
+
+// ========================================
+// ADD: New Guardians Personas
+// ========================================
+
+aura: require("./personas/aura"),
+mare: require("./personas/mare"),
+cocytus: require("./personas/cocytus"),
+sebas: require("./personas/sebas"),
+
 };
 
 // ========================================
@@ -94,7 +104,7 @@ try {
     // FIX 2026-06-14
     // room_idへDiscord Channelオブジェクト全体が
     // 保存される不具合対策
-    // channel.idを明示的に渡す
+    // channel.idを明示的に渡し
     // ========================================
     channelId: message.channel.id,
 
@@ -149,4 +159,44 @@ createBotClient(
 "SHALLTEAR BOT",
 process.env.SHALLTEAR_DISCORD_TOKEN,
 personas.shalltear
+);
+
+// ========================================
+// ADD: アウラ BOT起動
+// ========================================
+
+createBotClient(
+"AURA BOT",
+process.env.AURA_DISCORD_TOKEN,
+personas.aura
+);
+
+// ========================================
+// ADD: マーレ BOT起動
+// ========================================
+
+createBotClient(
+"MARE BOT",
+process.env.MARE_DISCORD_TOKEN,
+personas.mare
+);
+
+// ========================================
+// ADD: コキュートス BOT起動
+// ========================================
+
+createBotClient(
+"COCYTUS BOT",
+process.env.COCYTUS_DISCORD_TOKEN,
+personas.cocytus
+);
+
+// ========================================
+// ADD: セバス BOT起動
+// ========================================
+
+createBotClient(
+"SEBAS BOT",
+process.env.SEBAS_DISCORD_TOKEN,
+personas.sebas
 );
