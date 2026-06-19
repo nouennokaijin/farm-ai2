@@ -34,12 +34,6 @@ const path = require("path");
 //const demiurge = require("../personas/demiurge");
 //const shalltear = require("../personas/shalltear");
 
-const rules = JSON.parse(
-  fs.readFileSync(
-    path.join(__dirname, "../config/chatRule.json"),
-    "utf-8"
-  )
-);
 
 // ========================================
 // Persona Auto Loader
