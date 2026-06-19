@@ -95,7 +95,7 @@ const roomConfigMap = {
   "1517620931621818499": {
     type: "chat",
     personaId: "sebas"
-  }
+  },
 
   "1506369391762079957": {
     type: "meeting",
