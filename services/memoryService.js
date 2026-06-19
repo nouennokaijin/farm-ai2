@@ -88,13 +88,6 @@ const rules = JSON.parse(
   )
 );
 
-const personaMap = {
-  albedo,
-  demiurge,
-  shalltear,
-  system: { name: "system", systemPrompt: "" }
-};
-
 // ========================================
 // MAIN
 // ========================================
