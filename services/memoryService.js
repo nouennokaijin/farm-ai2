@@ -30,9 +30,62 @@ const LLMClient = require("../units/llmClient");
 const fs = require("fs");
 const path = require("path");
 
-const albedo = require("../personas/albedo");
-const demiurge = require("../personas/demiurge");
-const shalltear = require("../personas/shalltear");
+//const albedo = require("../personas/albedo");
+//const demiurge = require("../personas/demiurge");
+//const shalltear = require("../personas/shalltear");
+
+const rules = JSON.parse(
+  fs.readFileSync(
+    path.join(__dirname, "../config/chatRule.json"),
+    "utf-8"
+  )
+);
+
+// ========================================
+// Persona Auto Loader
+// 2026-06-20
+//
+// personasフォルダ内の .js を自動読込
+//
+// 例:
+// personas/albedo.js   → personaId = "albedo"
+// personas/aura.js     → personaId = "aura"
+// personas/mare.js     → personaId = "mare"
+//
+// 新人格追加時は
+// personasフォルダへ配置するだけ。
+// memoryService.js の修正不要。
+// ========================================
+
+const personaMap = {
+  system: {
+    name: "system",
+    systemPrompt: ""
+  }
+};
+
+const personaDir = path.join(
+  __dirname,
+  "../personas"
+);
+
+fs.readdirSync(personaDir)
+  .filter(file => file.endsWith(".js"))
+  .forEach(file => {
+
+    const personaId =
+      path.basename(file, ".js");
+
+    personaMap[personaId] = require(
+      path.join(personaDir, file)
+    );
+
+    console.log(
+      `✅ Persona Loaded: ${personaId}`
+    );
+
+  });
+
 
 const rules = JSON.parse(
   fs.readFileSync(
