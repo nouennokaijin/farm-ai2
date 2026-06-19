@@ -45,7 +45,8 @@ const ocrHandler = require("../handlers/ocrHandler");
 // 部屋 → 人格IDマッピング（コア設計）
 // ※ここでは「IDだけ」を渡す
 // ========================================
-const roomPersonaMap = {
+
+const roomConfigMap = {
   "1507420557266780323": "albedo",
   "1507547133790781540": "demiurge",
   "1507837526453391370": "shalltear",
@@ -92,7 +93,7 @@ async function dispatcher(event) {
     // ====================================
     // ★ 使用人格ID決定（ここが唯一の責務）
     // ====================================
-    const personaId = roomPersonaMap[roomId] || "system";
+    const personaId = roomConfigMap[roomId] || "system";
 
     // ====================================
     // デバッグログ
