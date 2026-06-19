@@ -1,6 +1,6 @@
 // ========================================
 // FILE: dispatcher.js
-// DATE: 2026-05-23
+// DATE: 2026-06-20
 // AUTHOR: OKIURA KAZUO
 // PURPOSE: AIなしルーティング（拡張可能設計）
 // ROLE: 入力を各ハンドラーへ振り分けるだけ
@@ -42,19 +42,75 @@ const ocrHandler = require("../handlers/ocrHandler");
 */
 
 // ========================================
-// 部屋 → 人格IDマッピング（コア設計）
-// ※ここでは「IDだけ」を渡す
+// 部屋 → 設定マップ（コア設計）
+// 2026-06-20
+//
+// 将来の会議室・執務室対応のため
+// 「部屋 → persona」ではなく
+// 「部屋 → config」へ進化
+//
+// chat:
+// {
+//   type: "chat",
+//   personaId: "albedo"
+// }
+//
+// meeting:
+// {
+//   type: "meeting",
+//   participants: [...]
+// }
 // ========================================
-
 const roomConfigMap = {
-  "1507420557266780323": "albedo",
-  "1507547133790781540": "demiurge",
-  "1507837526453391370": "shalltear",
-  "1517617334473330789": "aura",
-  "1517408295801851974": "mare",
-  "1517620085383106560": "cocytus",
-  "1517620931621818499": "sebas"
+  "1507420557266780323": {
+    type: "chat",
+    personaId: "albedo"
+  },
+
+  "1507547133790781540": {
+    type: "chat",
+    personaId: "demiurge"
+  },
+
+  "1507837526453391370": {
+    type: "chat",
+    personaId: "shalltear"
+  },
+
+  "1517617334473330789": {
+    type: "chat",
+    personaId: "aura"
+  },
+
+  "1517408295801851974": {
+    type: "chat",
+    personaId: "mare"
+  },
+
+  "1517620085383106560": {
+    type: "chat",
+    personaId: "cocytus"
+  },
+
+  "1517620931621818499": {
+    type: "chat",
+    personaId: "sebas"
+  }
+
+  "1506369391762079957": {
+    type: "meeting",
+    participants: [
+    "albedo",
+    "demiurge",
+    "shalltear",
+    "aura",
+    "mare",
+    "cocytus",
+    "sebas"
+    ]
+  }
 };
+
 
 // ========================================
 // 正規化関数（roomId統一）
@@ -91,9 +147,16 @@ async function dispatcher(event) {
     const roomId = normalizeRoomId(event);
 
     // ====================================
-    // ★ 使用人格ID決定（ここが唯一の責務）
+    // ★ 部屋設定取得
     // ====================================
-    const personaId = roomConfigMap[roomId] || "system";
+    const roomConfig =
+      roomConfigMap[roomId] || null;
+
+    // ====================================
+    // ★ 使用人格ID決定
+    // ====================================
+    const personaId =
+      roomConfig?.personaId || "system";
 
     // ====================================
     // デバッグログ
@@ -101,6 +164,7 @@ async function dispatcher(event) {
     console.log("================================");
     console.log("DISPATCHER START");
     console.log("ROOM ID:", roomId);
+    console.log("ROOM CONFIG:", roomConfig);
     console.log("PERSONA ID:", personaId);
     console.log("TEXT:", text);
     console.log("SOURCE:", event.source);
