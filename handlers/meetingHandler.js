@@ -11,7 +11,7 @@
 // ================================
 
 // AI生成エンジン（人格思考生成）
-const memoryService = require("../services/memoryService");
+// const memoryService = require("../services/memoryService");
 
 // ログ書き込み（監査・履歴）
 const { writeLog } = require("../core/logWriter");
@@ -56,34 +56,27 @@ class RoomContext {
     this.history = []; // 会話履歴保存
   }
 
-  // 次の発話者取得
   nextSpeaker() {
 
-    // SCRIPT範囲外チェック
     if (this.i >= SCRIPT.length) {
       return null;
     }
 
-    // 現在の発話者取得
     const speaker = SCRIPT[this.i];
 
-    // カウンター進行
     this.i++;
 
     return speaker;
   }
 
-  // ロック開始
   lock() {
     this.locked = true;
   }
 
-  // ロック解除
   unlock() {
     this.locked = false;
   }
 
-  // リセット
   reset() {
     this.i = 0;
     this.locked = true;
@@ -110,40 +103,24 @@ function getRoom(roomId) {
 
 async function handleMeeting(event) {
 
-  // roomID取得
   const roomId = event.channelId;
 
-  // room取得
   const room = getRoom(roomId);
 
-  // ================================
-  // 🚨 無効状態チェック
-  // ================================
+  if (room.locked) return;
 
-  if (room.locked) return; // 処理中なら無視
-
-  // ロック開始
   room.lock();
 
   try {
 
     const text = event.text || "";
 
-    // ================================
-    // 🎟 発話者決定（i++方式）
-    // ================================
-
     const speaker = room.nextSpeaker();
 
-    // SCRIPT終了時
     if (!speaker) {
       room.unlock();
       return "（会議終了）";
     }
-
-    // ================================
-    // 🧾 INPUT LOG
-    // ================================
 
     await writeLog({
       room_id: roomId,
@@ -153,18 +130,9 @@ async function handleMeeting(event) {
     });
 
     // ================================
-    // 🧠 AI GENERATION（再生のみ）
+    // 🧠 AI GENERATION（簡易代替）
     // ================================
-
-    const response = await memoryService.run({
-      text,
-      personaId: speaker,
-      turn: room.i
-    });
-
-    // ================================
-    // 🧾 OUTPUT LOG
-    // ================================
+    const response = `${speaker}: ${text}`;
 
     await writeLog({
       room_id: roomId,
@@ -173,18 +141,10 @@ async function handleMeeting(event) {
       message: response
     });
 
-    // ================================
-    // 🧠 HISTORY STORE
-    // ================================
-
     room.history.push({
       speaker,
       text: response
     });
-
-    // ================================
-    // 🔓 UNLOCK
-    // ================================
 
     room.unlock();
 
