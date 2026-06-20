@@ -1,110 +1,143 @@
 // ========================================
-// 📁 FILE: handlers/meetingHandler.js
+// 📁 FILE: meetingHandler.js
 // 📂 FOLDER: handlers
 // 📅 DATE: 2026-06-20
 // 👤 AUTHOR: OKIURA KAZUO
 // ========================================
 //
-// 🧠 SUMMARY
-// 守護者会議システムの1ターン制御ハンドラ
+// 🧠 PURPOSE
+// Turn-based AI meeting controller (HARD SAFE VERSION)
 //
-// ・発言順制御（turn-based dispatch）
-// ・1人ずつdispatcherへ戻す設計前提
-// ・conversation_logsへの記録
-// ・room_membersベースの順番制御
+// ・room単位の排他制御（暴走防止）
+// ・dispatcherによる発言順制御
+// ・memoryServiceによる統一生成
+// ・commitで状態確定
 //
-// ⚠️ IMPORTANT
-// ・AIService / core/db は存在しないため削除済み
-// ・実処理は memoryService + dispatcher に統合
+// ⚠️ DESIGN NOTES
+// ・並列実行を完全抑制
+// ・二重起動を防ぐロック機構
+// ・失敗しても必ずロック解除
 // ========================================
 
 
 // ========================================
-// ❌ REMOVED (存在しないため削除)
-// require("../services/AIService")
-// require("../core/db")
+// 📦 IMPORTS
 // ========================================
+const memoryService = require("../services/memoryService"); // AI生成レイヤー
+const dispatcher = require("../core/dispatcher"); // 会議制御コア
 
-// 実際に存在するサービスのみ使用
-const memoryService = require("../services/memoryService");
-
-// dispatcher（フロー制御の中枢）
-const dispatcher = require("../core/dispatcher");
-
-// DBアクセスは dispatcher 側 or session/unit 側に寄せる前提
-// ここでは直接DBは触らない設計に修正
 
 // ========================================
-// MAIN ENTRY
+// 🧠 ROOM LOCK (重要：同時実行防止)
+// ========================================
+const roomLocks = new Map(); // roomId単位でロック状態管理
+
+
+// ========================================
+// 🪑 MAIN ENTRY FUNCTION
 // ========================================
 async function handleMeeting({
-  roomId,
-  personaId,
-  text,
-  sessionId,
-  event
+  roomId,     // 会議ルームID
+  personaId,  // 発言する人格ID
+  text,       // ユーザー入力 or 前発言
+  sessionId,  // セッションID
+  event       // Discordイベントなど
 }) {
 
   // ========================================
-  // ① 入力ログ（受信内容）
+  // 🚫 ① ROOM LOCK CHECK
   // ========================================
-  console.log("================================");
-  console.log("MEETING HANDLER START");
-  console.log("ROOM ID:", roomId);
-  console.log("PERSONA:", personaId);
-  console.log("TEXT:", text);
-  console.log("================================");
+  if (roomLocks.get(roomId)) { // すでに処理中ならスキップ
+    console.log("🛑 ROOM LOCK ACTIVE - SKIP:", roomId); // スキップログ
+    return; // 何もしないで終了
+  }
 
   // ========================================
-  // ② dispatcherに制御を委譲
-  //    ※ここが「会議の司令塔」
+  // 🔒 ② LOCK ACQUIRE
   // ========================================
-  const next = await dispatcher.route({
-    roomId,
-    personaId,
-    text,
-    sessionId,
-    event
-  });
+  roomLocks.set(roomId, true); // このroomをロック
 
-  // ========================================
-  // ③ persona発言生成
-  // ========================================
-  // ⚠️ ここでAIServiceは使わない（削除済み設計）
-  // → memoryServiceがLLM含む唯一の生成レイヤー
+  try {
 
-  const response = await memoryService.run({
-    text,
-    personaId,
-    sessionId,
-    mode: "meeting",
-    event
-  });
+    // ========================================
+    // 🧾 ③ INPUT LOG
+    // ========================================
+    console.log("================================"); // 区切り線
+    console.log("🪑 MEETING HANDLER START"); // 開始ログ
+    console.log("ROOM ID:", roomId); // room確認
+    console.log("PERSONA:", personaId); // 発言者
+    console.log("TEXT:", text); // 入力内容
+    console.log("================================"); // 区切り線
 
-  // ========================================
-  // ④ dispatcherへ戻す（必須設計）
-  // ========================================
-  // これが重要：
-  // 「1人発言 → 必ずdispatcherへ戻る」
-  // ループ暴走防止ポイント
-  // ========================================
-  await dispatcher.commit({
-    roomId,
-    personaId,
-    response,
-    sessionId,
-    next
-  });
+    // ========================================
+    // 🧭 ④ DISPATCHER ROUTE (次の流れ決定)
+    // ========================================
+    let next = null; // 次の人格・ターン情報
 
-  // ========================================
-  // ⑤ return
-  // ========================================
-  return response;
+    try {
+      next = await dispatcher.route({ // 順序制御を取得
+        roomId,     // room指定
+        personaId,  // 現在人格
+        text,       // 発言内容
+        sessionId,  // session
+        event       // event
+      });
+    } catch (err) {
+      console.error("❌ dispatcher.route ERROR:", err); // エラー記録
+      next = null; // fallback
+    }
+
+    // ========================================
+    // 🧠 ⑤ AI RESPONSE GENERATION
+    // ========================================
+    let response = ""; // 出力初期化
+
+    try {
+      response = await memoryService.run({ // AI生成実行
+        text,        // 入力
+        personaId,   // 人格
+        sessionId,   // session
+        mode: "meeting", // 会議モード
+        event        // event
+      });
+    } catch (err) {
+      console.error("❌ memoryService.run ERROR:", err); // 生成失敗ログ
+      response = "（応答生成に失敗しました）"; // fallback応答
+    }
+
+    // ========================================
+    // 🔁 ⑥ COMMIT STATE BACK TO DISPATCHER
+    // ========================================
+    try {
+      await dispatcher.commit({ // 状態更新確定
+        roomId,     // room
+        personaId,  // 発言者
+        response,   // 出力
+        sessionId,  // session
+        next        // 次ターン情報
+      });
+    } catch (err) {
+      console.error("❌ dispatcher.commit ERROR:", err); // commit失敗ログ
+    }
+
+    // ========================================
+    // 📤 ⑦ RETURN RESPONSE
+    // ========================================
+    return response; // 呼び出し元へ返却
+
+  } finally {
+
+    // ========================================
+    // 🔓 ⑧ ALWAYS RELEASE LOCK
+    // ========================================
+    roomLocks.set(roomId, false); // 必ずロック解除
+  }
 }
 
+
 // ========================================
-// EXPORT
+// 📤 EXPORT
 // ========================================
 module.exports = {
-  handleMeeting
+  handleMeeting // 外部公開
 };
