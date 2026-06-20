@@ -1,7 +1,7 @@
 // ========================================
 // 📁 FOLDER : handlers
 // 📄 FILE : chatHandler.js
-// 📅 DATE : 2026-06-14
+// 📅 DATE : 2026-06-20
 // 👤 AUTHOR : OKIURA KAZUO
 // ========================================
 //
@@ -9,57 +9,78 @@
 // chatHandler（人格 + 会話エンジン）
 //
 // ・入力受付のみ
-// ・memoryServiceへ処理委譲
+// ・retrievalServiceでContext生成
+// ・llmClientで会話生成
 // ・返信送信
 //
 // 🎯 設計思想
 // chatHandlerは“入口と出口だけ”
 // ロジックはすべてservicesへ移譲
-//
 // ========================================
 
-const memoryService = require("../services/memoryService");
+// 🧠 retrievalService（記憶＋検索＋Context生成）
+const retrievalService = require("../services/retrievalService");
+
+// 🧠 llmClient（LLM生成エンジン）
+const llmClient = require("../units/llmClient");
 
 // ========================================
 // MAIN
 // ========================================
 async function chatHandler(event) {
   try {
+
+    // 🧠 入力テキスト抽出
     const text = extractText(event);
+
+    // 🧠 空入力ガード
     if (!text) return;
 
+    // 🧠 人格ID取得（デフォルト system）
     const personaId = event.personaId || "system";
+
+    // 🧠 モード取得（chat / meeting など）
     const mode = event.mode || "chat";
 
+    // 🧠 セッションID生成
     const sessionId =
       event.session_id ||
       event.channelId ||
       "default";
 
     // ====================================
-    // 🧠 Core Pipeline（全処理委譲）
+    // 🧠 ① Retrieval（記憶＋検索＋Context生成）
     // ====================================
-    const responseRaw = await memoryService.run({
-      text,
+    const context = await retrievalService.build({
+      roomId: event.roomId || event.channelId || "default",
       personaId,
-      mode,
-      sessionId,
-      event
+      query: text,
+      session: event.session
+    });
+
+    // 🧠 Contextに入力文を追加（LLM用）
+    context.input = text;
+
+    // ====================================
+    // 🧠 ② LLM生成（llmClient）
+    // ====================================
+    const responseRaw = await llmClient.chat(context, {
+      max_tokens: 120
     });
 
     // ====================================
-    // Reply
+    // 🧠 ③ 返信送信
     // ====================================
     await safeReply(event, responseRaw);
 
     // ====================================
-    // FIX 2026-06-14
-    // dispatcher側のAIログ保存で
-    // 応答本文を利用できるよう返却する
+    // 🧠 ④ dispatcherログ用返却
     // ====================================
     return responseRaw;
 
   } catch (err) {
+
+    // 🧠 エラーハンドリング
     console.error("[ERROR] chatHandler", err);
   }
 }
@@ -68,6 +89,7 @@ async function chatHandler(event) {
 // Utils（変更なし）
 // ========================================
 
+// 🧠 テキスト抽出ユーティリティ
 function extractText(event) {
   if (!event) return "";
   if (typeof event === "string") return event;
@@ -81,6 +103,7 @@ function extractText(event) {
   );
 }
 
+// 🧠 安全返信ユーティリティ
 async function safeReply(event, text) {
   if (!text) return;
 
@@ -88,4 +111,5 @@ async function safeReply(event, text) {
   if (event.channel?.send) return await event.channel.send(text);
 }
 
+// 🧠 export
 module.exports = chatHandler;
