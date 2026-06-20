@@ -1,256 +1,143 @@
 // ========================================
-// FILE: meetingHandler.js
-// VERSION: v2 (state-machine / turn-based)
-// PURPOSE:
-//  - 会議を「1ターンずつ進めるエンジン」へ再設計
-//  - DB(turn_no)が進行を制御する唯一の状態源
-//  - dispatcherは毎回この関数を呼ぶだけ
+// 📁 FOLDER : handlers
+// 📄 FILE : meetingHandler.js（state-machine v3）
+// 📅 DATE : 2026-06-20
+// 👤 AUTHOR : OKIURA KAZUO
+// ========================================
+//
+// 🧠 SUMMARY
+// 円卓会議エンジン（完全ターン制）
+/*
+・DB(turn_no)が唯一の進行状態
+・1リクエスト = 1人格の発言
+・memoryServiceで思考生成
+・dispatcherが毎回呼び出す前提
+*/
 // ========================================
 
-const { writeLog } = require("../core/logWriter");
-const AIService = require("../services/AIService");
-const db = require("../core/db");
-
+// ========================================
+// 外部依存
+// ========================================
+const { run: memoryService } = require("../services/memoryService"); // ← 実在する思考エンジン
+const db = require("../core/db"); // ← PostgreSQL接続
+const { writeLog } = require("../core/logWriter"); // ← ログ保存
 
 // ========================================
-// 役割：特定人格の発言生成
+// メイン処理
 // ========================================
-async function generateProposal(personaId, topic) {
-  // 👉 1人格分の意見を生成する
+async function meetingHandler(event) { // ← dispatcherから呼ばれる入口関数
 
-  const prompt = `
-あなたはナザリックの守護者「${personaId}」。
+  try { // ← 例外安全ブロック開始
 
-議題:
-${topic}
+    // ====================================
+    // 1. 入力情報取得
+    // ====================================
+    const roomId = event.channelId; // ← Discordの部屋ID
+    const taskId = event.task_id; // ← 会議タスクID
+    const topic = event.text; // ← 議題（入力そのまま）
 
-必ずJSONで回答せよ：
-{
-  "persona": "${personaId}",
-  "proposal": ""
-}
-`;
-
-  const result = await AIService.generate({
-    personaId,
-    prompt
-  });
-
-  // 👉 生データをそのまま返す（解析は上位層）
-  return result;
-}
-
-
-// ========================================
-// デミウルゴス（批判生成）
-// ========================================
-async function generateCritique(topic, proposals) {
-  // 👉 全員の提案をまとめて批判する（1回のみ）
-
-  const prompt = `
-あなたはデミウルゴス。
-
-議題:
-${topic}
-
-以下の提案を論理的に破壊せよ：
-
-${JSON.stringify(proposals, null, 2)}
-`;
-
-  return await AIService.generate({
-    personaId: "demiurge",
-    prompt
-  });
-}
-
-
-// ========================================
-// アルベド（統合）
-// ========================================
-async function generateFinal(topic, proposals, critique) {
-  // 👉 批判を踏まえて最終案を作る
-
-  const prompt = `
-あなたはアルベド。
-
-議題:
-${topic}
-
-提案:
-${JSON.stringify(proposals, null, 2)}
-
-批判:
-${critique}
-
-最終意思決定をJSONで出力：
-{
-  "final": []
-}
-`;
-
-  return await AIService.generate({
-    personaId: "albedo",
-    prompt
-  });
-}
-
-
-// ========================================
-// メイン：1ターン実行エンジン
-// ========================================
-async function meetingHandler(event) {
-  try {
-
-    // ===============================
-    // 1. 基本情報取得
-    // ===============================
-    const roomId = event.channelId;
-    const taskId = event.task_id;
-    const topic = event.text;
-
-    // 👉 会議の進行状態をDBから取得
-    const taskRes = await db.query(
-      `SELECT status FROM tasks WHERE id = $1`,
-      [taskId]
-    );
-
-    const roomRes = await db.query(
-      `SELECT status FROM rooms WHERE room_id = $1`,
+    // ====================================
+    // 2. 出席者一覧取得（DB基準）
+    // ====================================
+    const membersResult = await db.query( // ← room_membersから取得
+      `SELECT persona_id FROM room_members WHERE room_id = $1`,
       [roomId]
     );
 
-    // ===============================
-    // 2. 現在のターン取得
-    // ===============================
-    const turnRes = await db.query(
+    const members = membersResult.rows.map(r => r.persona_id); // ← 配列化
+
+    // ====================================
+    // 3. 現在ターン取得
+    // ====================================
+    const turnResult = await db.query( // ← 進行状態取得
       `SELECT COALESCE(MAX(turn_no), 0) + 1 AS next_turn
        FROM conversation_logs
        WHERE task_id = $1`,
       [taskId]
     );
 
-    const turn_no = turnRes.rows[0].next_turn;
+    const turnNo = turnResult.rows[0].next_turn; // ← 次ターン番号
 
-    // ===============================
-    // 3. 出席者取得
-    // ===============================
-    const membersResult = await db.query(
-      `SELECT persona_id FROM room_members WHERE room_id = $1`,
-      [roomId]
-    );
+    // ====================================
+    // 4. 発言者決定（順番制御）
+    // ====================================
+    const speaker = members[(turnNo - 1) % members.length]; // ← 順番ループ制御
 
-    const guardians = membersResult.rows.map(r => r.persona_id);
+    // ====================================
+    // 5. ログ（開始）
+    // ====================================
+    console.log("================================"); // ← デバッグ開始
+    console.log("MEETING TURN START"); // ← 状態確認
+    console.log("ROOM:", roomId); // ← 部屋ID
+    console.log("TASK:", taskId); // ← タスクID
+    console.log("TURN:", turnNo); // ← ターン番号
+    console.log("SPEAKER:", speaker); // ← 発言者
+    console.log("================================"); // ← 区切り
 
-    // ===============================
-    // 4. ターン制制御（ここが核心）
-    // ===============================
-
-    // 発言順序をDBベースで固定
-    const speaker = guardians[(turn_no - 1) % guardians.length];
-
-    console.log("================================");
-    console.log("MEETING TURN EXECUTION");
-    console.log("ROOM:", roomId);
-    console.log("TASK:", taskId);
-    console.log("TURN:", turn_no);
-    console.log("SPEAKER:", speaker);
-    console.log("================================");
-
-    // ===============================
-    // 5. フェーズ制御
-    // ===============================
-
-    let output = null;
-    let tags = [];
-
-    // -------------------------------
-    // A) 守護者ターン（通常発言）
-    // -------------------------------
-    if (speaker !== "demiurge" && speaker !== "albedo") {
-
-      output = await generateProposal(speaker, topic);
-      tags = ["proposal"];
-
-    }
-
-    // -------------------------------
-    // B) デミウルゴス（批判フェーズ）
-    // ※全員分終わった後に呼ばれる想定
-    // -------------------------------
-    if (speaker === "demiurge") {
-
-      // 👉 過去発言取得
-      const history = await db.query(
-        `SELECT message FROM conversation_logs
-         WHERE task_id = $1 AND tags @> ARRAY['proposal']`,
-        [taskId]
-      );
-
-      output = await generateCritique(topic, history.rows);
-      tags = ["critique"];
-    }
-
-    // -------------------------------
-    // C) アルベド（最終統合）
-    // -------------------------------
-    if (speaker === "albedo") {
-
-      const history = await db.query(
-        `SELECT message FROM conversation_logs
-         WHERE task_id = $1`,
-        [taskId]
-      );
-
-      const critique = history.rows.filter(r => r.message.includes("critique"));
-      const proposals = history.rows.filter(r => r.message.includes("proposal"));
-
-      output = await generateFinal(topic, proposals, critique);
-      tags = ["final"];
-    }
-
-    // ===============================
-    // 6. ログ保存（単一ターン）
-    // ===============================
-    await writeLog({
-      task_id: taskId,
-      room_id: roomId,
-      persona_id: speaker,
-      source: "meeting",
-      speaker: "ai",
-      message: output,
-      turn_no,
-      tags
+    // ====================================
+    // 6. 思考生成（memoryService呼び出し）
+    // ====================================
+    const response = await memoryService({ // ← AI生成本体
+      text: topic, // ← 議題を入力
+      personaId: speaker, // ← 現在の発言者
+      mode: "meeting", // ← 会議モード
+      sessionId: taskId, // ← セッションID
+      event // ← 元イベント
     });
 
-    // ===============================
-    // 7. タスク進行更新
-    // ===============================
-    await db.query(
+    // ====================================
+    // 7. ログ保存（発言）
+    // ====================================
+    await writeLog({ // ← 会話ログ永続化
+      task_id: taskId, // ← タスク紐付け
+      room_id: roomId, // ← 部屋紐付け
+      persona_id: speaker, // ← 発言者
+      source: "meeting", // ← 会議ソース
+      speaker: "ai", // ← AI発言
+      message: response, // ← 生成結果
+      turn_no: turnNo, // ← ターン番号
+      tags: ["meeting"] // ← メタタグ
+    });
+
+    // ====================================
+    // 8. タスク状態更新
+    // ====================================
+    await db.query( // ← 更新（進行記録）
       `UPDATE tasks SET updated_at = now() WHERE id = $1`,
       [taskId]
     );
 
-    // ===============================
-    // 8. 返却（1ターンだけ）
-    // ===============================
-    return {
-      task_id: taskId,
-      room_id: roomId,
-      turn_no,
-      speaker,
-      output
+    // ====================================
+    // 9. レスポンス返却（1ターンのみ）
+    // ====================================
+    return { // ← dispatcherへ返す
+      task_id: taskId, // ← タスクID
+      room_id: roomId, // ← 部屋ID
+      turn_no: turnNo, // ← ターン番号
+      speaker, // ← 発言者
+      message: response // ← 出力
     };
 
-  } catch (err) {
+  } catch (err) { // ← エラーハンドリング開始
 
-    console.error("MEETING ERROR:", err);
+    // ====================================
+    // 10. エラーログ
+    // ====================================
+    console.error("MEETING ERROR:", err); // ← 標準エラー出力
 
-    return {
-      error: true,
-      message: "meetingHandler v2 failed"
+    // ====================================
+    // 11. フォールバック応答
+    // ====================================
+    return { // ← 最低限返す
+      error: true, // ← エラーフラグ
+      message: "meetingHandler failed" // ← 固定メッセージ
     };
-  }
-}
 
-module.exports = meetingHandler;
+  } // ← try-catch終了
+
+} // ← meetingHandler終了
+
+// ========================================
+// export
+// ========================================
+module.exports = meetingHandler; // ← 外部公開
