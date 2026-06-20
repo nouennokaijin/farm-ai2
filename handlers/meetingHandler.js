@@ -1,147 +1,111 @@
 // ========================================
-// 📁 FILE: meeting.js
+// 📁 FILE: meetingHandler.js
 // 📂 FOLDER: handlers
 // 📅 DATE: 2026-06-20
 // 👤 AUTHOR: OKIURA KAZUO
-// 🧠 SUMMARY: RoomContextベースのターン制会議制御
+// 🧠 SUMMARY: 固定台本（i++）ベースのターン制会議再生システム
 // ========================================
 
 // ================================
 // 🧠 IMPORTS
 // ================================
 
-// AI生成レイヤー（思考エンジン）
+// AI生成エンジン（人格思考生成）
 const memoryService = require("../services/memoryService");
 
-// DBログ書き込み
+// ログ書き込み（監査・履歴）
 const { writeLog } = require("../core/logWriter");
 
 // ================================
-// 🚦 STATE（メモリ信号機）
+// 🎭 FIXED SCRIPT（発話台本）
 // ================================
 
-const STATE = {
-  IDLE: 1,        // 待機状態
-  LOCKED: 2,      // 排他ロック中
-  PROCESSING: 3,  // AI処理中
-  DRAINING: 4     // リセット待機状態
-};
-
-// ================================
-// 🎭 PERSONA（発言主体）
-// ================================
-
-const PERSONA = {
-  AURA: "aura",
-  MARE: "mare",
-  SHALLTEAR: "shalltear",
-  COCYTUS: "cocytus",
-  SEBAS: "sebas",
-  DEMIURGE: "demiurge",
-  ALBEDO: "albedo"
-};
-
-// ================================
-// 🧠 MODE（思考タイプ）
-// ================================
-
-const MODE = {
-  PROPOSAL: "proposal",
-  DESTRUCT: "destruction",
-  REBUILD: "rebuild",
-  SYNTHESIS: "synthesis"
-};
-
-// ================================
-// 🌊 MOOD（思考トーン）
-// ================================
-
-const MOOD = {
-  CALM: "calm",
-  AGGRESSIVE: "aggressive",
-  STRATEGIC: "strategic",
-  CREATIVE: "creative"
-};
-
-// ================================
-// 🧠 ROOM CONTEXT（生きた状態）
-// ================================
-
-class RoomContext {
-
-  constructor(roomId) {
-    this.roomId = roomId;              // 部屋ID
-
-    this.state = STATE.IDLE;           // 現在状態
-    this.locked = false;               // メモリロック
-
-    this.turn = 0;                    // ターン番号
-
-    this.persona = PERSONA.AURA;      // 現在人格
-    this.mode = MODE.PROPOSAL;        // 思考モード
-    this.mood = MOOD.CALM;            // 感情状態
-  }
-
-  // ロック開始
-  lock() {
-    this.state = STATE.LOCKED;
-    this.locked = true;
-  }
-
-  // ロック解除
-  unlock() {
-    this.state = STATE.IDLE;
-    this.locked = false;
-  }
-
-  // 処理中
-  processing() {
-    this.state = STATE.PROCESSING;
-  }
-
-  // ターン進行
-  nextTurn() {
-    this.turn++;
-  }
-
-  // モード変更
-  setMode(mode) {
-    this.mode = mode;
-  }
-
-  // 人格変更
-  setPersona(persona) {
-    this.persona = persona;
-  }
-
-  // ムード変更
-  setMood(mood) {
-    this.mood = mood;
-  }
-
-  // リセット（安全停止用）
-  reset() {
-    this.state = STATE.DRAINING;
-    this.locked = true;
-  }
-}
+// 👉 meetingは「思考会議」ではなく「再生システム」
+const SCRIPT = [
+  "user",        // 1 お題入力
+  "aura", "aura", // 2-3 アウラ提案・Proposal
+  "mare", "mare", // 4-5 マール提案・Proposal
+  "shalltear", "shalltear", // 6-7 シャルティア
+  "cocytus", "cocytus", // 8-9 コキュートス
+  "sebas", "sebas", // 10-11 セバス
+  "demiurge", // 12 デミウルゴス（統合・論破）
+  "albedo", "albedo", "albedo" // 13-15 アルベド再構築
+];
 
 // ================================
 // 🧠 ROOM STORE（メモリ常駐）
 // ================================
 
-const rooms = new Map(); // roomId -> RoomContext
+// roomId → 状態保持
+const rooms = new Map();
 
-// room取得（なければ生成）
+// ================================
+// 🧠 ROOM CONTEXT（最小構造）
+// ================================
+
+class RoomContext {
+
+  constructor(roomId) {
+
+    this.roomId = roomId; // 部屋ID
+
+    this.i = 0; // 👉 ターンカウンター（最重要）
+
+    this.locked = false; // 多重実行防止
+
+    this.history = []; // 会話履歴保存
+  }
+
+  // 次の発話者取得
+  nextSpeaker() {
+
+    // SCRIPT範囲外チェック
+    if (this.i >= SCRIPT.length) {
+      return null;
+    }
+
+    // 現在の発話者取得
+    const speaker = SCRIPT[this.i];
+
+    // カウンター進行
+    this.i++;
+
+    return speaker;
+  }
+
+  // ロック開始
+  lock() {
+    this.locked = true;
+  }
+
+  // ロック解除
+  unlock() {
+    this.locked = false;
+  }
+
+  // リセット
+  reset() {
+    this.i = 0;
+    this.locked = true;
+    this.history = [];
+  }
+}
+
+// ================================
+// 🧠 ROOM GETTER
+// ================================
+
 function getRoom(roomId) {
+
   if (!rooms.has(roomId)) {
     rooms.set(roomId, new RoomContext(roomId));
   }
+
   return rooms.get(roomId);
 }
 
 // ================================
-// 🧠 MAIN MEETING HANDLER
+// 🎬 MAIN MEETING HANDLER（再生機）
 // ================================
 
 async function handleMeeting(event) {
@@ -149,74 +113,74 @@ async function handleMeeting(event) {
   // roomID取得
   const roomId = event.channelId;
 
-  // RoomContext取得
+  // room取得
   const room = getRoom(roomId);
 
   // ================================
-  // 🚨 RESET / DRAIN CHECK
+  // 🚨 無効状態チェック
   // ================================
 
-  if (room.state === STATE.DRAINING) {
-    return; // 新規処理完全停止
-  }
-
-  // ================================
-  // 🚦 LOCK CHECK（多重実行防止）
-  // ================================
-
-  if (room.locked) {
-    return; // すでに処理中
-  }
+  if (room.locked) return; // 処理中なら無視
 
   // ロック開始
   room.lock();
 
   try {
 
-    // 処理中状態へ
-    room.processing();
-
     const text = event.text || "";
 
     // ================================
-    // 🧾 INPUT LOG（ユーザー）
+    // 🎟 発話者決定（i++方式）
+    // ================================
+
+    const speaker = room.nextSpeaker();
+
+    // SCRIPT終了時
+    if (!speaker) {
+      room.unlock();
+      return "（会議終了）";
+    }
+
+    // ================================
+    // 🧾 INPUT LOG
     // ================================
 
     await writeLog({
       room_id: roomId,
-      persona_id: room.persona,
       speaker: "user",
+      persona_id: speaker,
       message: text
     });
 
     // ================================
-    // 🧠 AI GENERATION
+    // 🧠 AI GENERATION（再生のみ）
     // ================================
 
     const response = await memoryService.run({
       text,
-      personaId: room.persona,
-      mode: room.mode,
-      mood: room.mood,
-      turn: room.turn
+      personaId: speaker,
+      turn: room.i
     });
 
     // ================================
-    // 🧾 OUTPUT LOG（AI）
+    // 🧾 OUTPUT LOG
     // ================================
 
     await writeLog({
       room_id: roomId,
-      persona_id: room.persona,
-      speaker: "ai",
+      speaker,
+      persona_id: speaker,
       message: response
     });
 
     // ================================
-    // 🔁 TURN UPDATE
+    // 🧠 HISTORY STORE
     // ================================
 
-    room.nextTurn();
+    room.history.push({
+      speaker,
+      text: response
+    });
 
     // ================================
     // 🔓 UNLOCK
@@ -230,7 +194,6 @@ async function handleMeeting(event) {
 
     console.error("🔥 MEETING ERROR:", err);
 
-    // 安全解除
     room.unlock();
 
     return "（会議処理エラー）";
@@ -238,14 +201,13 @@ async function handleMeeting(event) {
 }
 
 // ================================
-// 📤 RESET FUNCTION（安全停止）
+// 🧨 RESET FUNCTION
 // ================================
 
 function resetRoom(roomId) {
 
   const room = getRoom(roomId);
 
-  // 新規処理停止モード
   room.reset();
 
   console.log("🧨 ROOM RESET:", roomId);
