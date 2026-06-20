@@ -73,6 +73,10 @@ async function build({
 function buildContext({ dbLogs, web, drive }) {
 
   return {
+    // 🧠 FIX①: LLMが期待している memory 層を追加（重要）
+    // これが無いと「初対面AI」になる
+    memory: dbLogs.map(log => log.message),
+
     // 🧠 DBログをLLM用フォーマットへ変換
     db: dbLogs.map(log => ({
       role: log.speaker,
