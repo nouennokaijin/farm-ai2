@@ -26,6 +26,16 @@ function buildPrompt(context) {
   const logs = context?.db || [];
   const userInput = context?.query || "";
 
+  // ========================================
+  // 🛠 FIX: webが配列でない場合のクラッシュ防止
+  // （WebGateUnitやretrievalService由来で object が混入するケース対策）
+  // ========================================
+  const safeWeb = Array.isArray(web)
+    ? web
+    : web?.data?.results
+      ? web.data.results
+      : [];
+
   const system = `
 # ROLE
 You are an AI assistant.
@@ -43,7 +53,7 @@ Keep response concise.
 ${logs.map(l => `[${l.speaker}] ${l.message}`).join("\n")}
 
 # WEB
-${web.map(w => `${w.title || ""}: ${w.snippet || ""}`).join("\n")}
+${safeWeb.map(w => `${w.title || ""}: ${w.snippet || ""}`).join("\n")}
 
 # USER
 ${userInput}
@@ -70,6 +80,11 @@ async function chat(context, options = {}) {
 
   } catch (err) {
     console.error("❌ LLMClient error:", err);
+
+    // ========================================
+    // 🛠 FIX: エラー時も型を崩さない返却
+    // （呼び出し側の破壊防止）
+    // ========================================
     return "";
   }
 }
