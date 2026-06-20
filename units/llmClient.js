@@ -1,6 +1,6 @@
 // ========================================
-// 📁 FOLDER : units
-// 📄 FILE : llmClient.js（Context対応版）
+// 📁 FILE: llmClient.js
+// 📂 FOLDER: units
 // 📅 DATE : 2026-06-20
 // 👤 AUTHOR : OKIURA KAZUO
 // ========================================
@@ -21,10 +21,10 @@ const groqService = require("../services/groqService");
 // ========================================
 function buildPrompt(context) {
 
-  const memory = context?.memory?.summary || [];
-  const web = context?.web?.data?.results || [];
-  const logs = context?.logs || [];
-  const userInput = context?.input || "";
+  const memory = context?.memory || [];
+  const web = context?.web || [];
+  const logs = context?.db || [];
+  const userInput = context?.query || "";
 
   const system = `
 # ROLE
@@ -40,10 +40,10 @@ Keep response concise.
 
   const user = `
 # RECENT LOGS
-${logs.map(l => `[${l.role}] ${l.content}`).join("\n")}
+${logs.map(l => `[${l.speaker}] ${l.message}`).join("\n")}
 
 # WEB
-${web.map(w => `${w.title}: ${w.snippet}`).join("\n")}
+${web.map(w => `${w.title || ""}: ${w.snippet || ""}`).join("\n")}
 
 # USER
 ${userInput}

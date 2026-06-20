@@ -73,14 +73,17 @@ async function build({
 function buildContext({ dbLogs, web, drive }) {
 
   return {
+    // 🧠 DBログをLLM用フォーマットへ変換
     db: dbLogs.map(log => ({
-      speaker: log.speaker,
-      message: log.message,
+      role: log.speaker,
+      content: log.message,
       time: log.created_at
     })),
 
+    // 🌐 Web検索結果（安全フォールバック付き）
     web: web?.data?.results || web || [],
 
+    // 📦 Drive検索結果（将来拡張用）
     drive: drive || []
   };
 }
