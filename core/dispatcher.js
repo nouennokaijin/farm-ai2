@@ -12,6 +12,9 @@
 // ========================================
 const chatHandler = require("../handlers/chatHandler");
 
+// 🧠 ★追加：meetingHandler接続（NEW）
+const meetingHandler = require("../handlers/meetingHandler");
+
 // 🧠 ログ書き込み追加（NEW）
 const { writeLog } = require("../core/logWriter");
 
@@ -159,6 +162,17 @@ async function dispatcher(event) {
       roomConfig?.personaId || "system";
 
     // ====================================
+    // 🧠 ★追加：typeベースルーティング（NEW）
+    // ====================================
+    if (roomConfig?.type === "meeting") {
+      return await meetingHandler(event);
+    }
+
+    if (roomConfig?.type === "chat") {
+      // chatは下の通常フローへ
+    }
+
+    // ====================================
     // デバッグログ
     // ====================================
     console.log("================================");
@@ -233,7 +247,7 @@ async function dispatcher(event) {
     */
 
     // ====================================
-    // 4. 会議（未実装）
+    // 4. 会議（未実装・fallback）※保険
     // ====================================
     /*
     if (
