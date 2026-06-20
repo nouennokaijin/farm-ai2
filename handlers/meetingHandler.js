@@ -1,143 +1,262 @@
 // ========================================
-// 📁 FILE: meetingHandler.js
+// 📁 FILE: meeting.js
 // 📂 FOLDER: handlers
 // 📅 DATE: 2026-06-20
 // 👤 AUTHOR: OKIURA KAZUO
-// ========================================
-//
-// 🧠 PURPOSE
-// Turn-based AI meeting controller (HARD SAFE VERSION)
-//
-// ・room単位の排他制御（暴走防止）
-// ・dispatcherによる発言順制御
-// ・memoryServiceによる統一生成
-// ・commitで状態確定
-//
-// ⚠️ DESIGN NOTES
-// ・並列実行を完全抑制
-// ・二重起動を防ぐロック機構
-// ・失敗しても必ずロック解除
+// 🧠 SUMMARY: RoomContextベースのターン制会議制御
 // ========================================
 
+// ================================
+// 🧠 IMPORTS
+// ================================
 
-// ========================================
-// 📦 IMPORTS
-// ========================================
-const memoryService = require("../services/memoryService"); // AI生成レイヤー
-const dispatcher = require("../core/dispatcher"); // 会議制御コア
+// AI生成レイヤー（思考エンジン）
+const memoryService = require("../services/memoryService");
 
+// DBログ書き込み
+const { writeLog } = require("../core/logWriter");
 
-// ========================================
-// 🧠 ROOM LOCK (重要：同時実行防止)
-// ========================================
-const roomLocks = new Map(); // roomId単位でロック状態管理
+// ================================
+// 🚦 STATE（メモリ信号機）
+// ================================
 
+const STATE = {
+  IDLE: 1,        // 待機状態
+  LOCKED: 2,      // 排他ロック中
+  PROCESSING: 3,  // AI処理中
+  DRAINING: 4     // リセット待機状態
+};
 
-// ========================================
-// 🪑 MAIN ENTRY FUNCTION
-// ========================================
-async function handleMeeting({
-  roomId,     // 会議ルームID
-  personaId,  // 発言する人格ID
-  text,       // ユーザー入力 or 前発言
-  sessionId,  // セッションID
-  event       // Discordイベントなど
-}) {
+// ================================
+// 🎭 PERSONA（発言主体）
+// ================================
 
-  // ========================================
-  // 🚫 ① ROOM LOCK CHECK
-  // ========================================
-  if (roomLocks.get(roomId)) { // すでに処理中ならスキップ
-    console.log("🛑 ROOM LOCK ACTIVE - SKIP:", roomId); // スキップログ
-    return; // 何もしないで終了
+const PERSONA = {
+  AURA: "aura",
+  MARE: "mare",
+  SHALLTEAR: "shalltear",
+  COCYTUS: "cocytus",
+  SEBAS: "sebas",
+  DEMIURGE: "demiurge",
+  ALBEDO: "albedo"
+};
+
+// ================================
+// 🧠 MODE（思考タイプ）
+// ================================
+
+const MODE = {
+  PROPOSAL: "proposal",
+  DESTRUCT: "destruction",
+  REBUILD: "rebuild",
+  SYNTHESIS: "synthesis"
+};
+
+// ================================
+// 🌊 MOOD（思考トーン）
+// ================================
+
+const MOOD = {
+  CALM: "calm",
+  AGGRESSIVE: "aggressive",
+  STRATEGIC: "strategic",
+  CREATIVE: "creative"
+};
+
+// ================================
+// 🧠 ROOM CONTEXT（生きた状態）
+// ================================
+
+class RoomContext {
+
+  constructor(roomId) {
+    this.roomId = roomId;              // 部屋ID
+
+    this.state = STATE.IDLE;           // 現在状態
+    this.locked = false;               // メモリロック
+
+    this.turn = 0;                    // ターン番号
+
+    this.persona = PERSONA.AURA;      // 現在人格
+    this.mode = MODE.PROPOSAL;        // 思考モード
+    this.mood = MOOD.CALM;            // 感情状態
   }
 
-  // ========================================
-  // 🔒 ② LOCK ACQUIRE
-  // ========================================
-  roomLocks.set(roomId, true); // このroomをロック
+  // ロック開始
+  lock() {
+    this.state = STATE.LOCKED;
+    this.locked = true;
+  }
 
-  try {
+  // ロック解除
+  unlock() {
+    this.state = STATE.IDLE;
+    this.locked = false;
+  }
 
-    // ========================================
-    // 🧾 ③ INPUT LOG
-    // ========================================
-    console.log("================================"); // 区切り線
-    console.log("🪑 MEETING HANDLER START"); // 開始ログ
-    console.log("ROOM ID:", roomId); // room確認
-    console.log("PERSONA:", personaId); // 発言者
-    console.log("TEXT:", text); // 入力内容
-    console.log("================================"); // 区切り線
+  // 処理中
+  processing() {
+    this.state = STATE.PROCESSING;
+  }
 
-    // ========================================
-    // 🧭 ④ DISPATCHER ROUTE (次の流れ決定)
-    // ========================================
-    let next = null; // 次の人格・ターン情報
+  // ターン進行
+  nextTurn() {
+    this.turn++;
+  }
 
-    try {
-      next = await dispatcher.route({ // 順序制御を取得
-        roomId,     // room指定
-        personaId,  // 現在人格
-        text,       // 発言内容
-        sessionId,  // session
-        event       // event
-      });
-    } catch (err) {
-      console.error("❌ dispatcher.route ERROR:", err); // エラー記録
-      next = null; // fallback
-    }
+  // モード変更
+  setMode(mode) {
+    this.mode = mode;
+  }
 
-    // ========================================
-    // 🧠 ⑤ AI RESPONSE GENERATION
-    // ========================================
-    let response = ""; // 出力初期化
+  // 人格変更
+  setPersona(persona) {
+    this.persona = persona;
+  }
 
-    try {
-      response = await memoryService.run({ // AI生成実行
-        text,        // 入力
-        personaId,   // 人格
-        sessionId,   // session
-        mode: "meeting", // 会議モード
-        event        // event
-      });
-    } catch (err) {
-      console.error("❌ memoryService.run ERROR:", err); // 生成失敗ログ
-      response = "（応答生成に失敗しました）"; // fallback応答
-    }
+  // ムード変更
+  setMood(mood) {
+    this.mood = mood;
+  }
 
-    // ========================================
-    // 🔁 ⑥ COMMIT STATE BACK TO DISPATCHER
-    // ========================================
-    try {
-      await dispatcher.commit({ // 状態更新確定
-        roomId,     // room
-        personaId,  // 発言者
-        response,   // 出力
-        sessionId,  // session
-        next        // 次ターン情報
-      });
-    } catch (err) {
-      console.error("❌ dispatcher.commit ERROR:", err); // commit失敗ログ
-    }
-
-    // ========================================
-    // 📤 ⑦ RETURN RESPONSE
-    // ========================================
-    return response; // 呼び出し元へ返却
-
-  } finally {
-
-    // ========================================
-    // 🔓 ⑧ ALWAYS RELEASE LOCK
-    // ========================================
-    roomLocks.set(roomId, false); // 必ずロック解除
+  // リセット（安全停止用）
+  reset() {
+    this.state = STATE.DRAINING;
+    this.locked = true;
   }
 }
 
+// ================================
+// 🧠 ROOM STORE（メモリ常駐）
+// ================================
 
-// ========================================
+const rooms = new Map(); // roomId -> RoomContext
+
+// room取得（なければ生成）
+function getRoom(roomId) {
+  if (!rooms.has(roomId)) {
+    rooms.set(roomId, new RoomContext(roomId));
+  }
+  return rooms.get(roomId);
+}
+
+// ================================
+// 🧠 MAIN MEETING HANDLER
+// ================================
+
+async function handleMeeting(event) {
+
+  // roomID取得
+  const roomId = event.channelId;
+
+  // RoomContext取得
+  const room = getRoom(roomId);
+
+  // ================================
+  // 🚨 RESET / DRAIN CHECK
+  // ================================
+
+  if (room.state === STATE.DRAINING) {
+    return; // 新規処理完全停止
+  }
+
+  // ================================
+  // 🚦 LOCK CHECK（多重実行防止）
+  // ================================
+
+  if (room.locked) {
+    return; // すでに処理中
+  }
+
+  // ロック開始
+  room.lock();
+
+  try {
+
+    // 処理中状態へ
+    room.processing();
+
+    const text = event.text || "";
+
+    // ================================
+    // 🧾 INPUT LOG（ユーザー）
+    // ================================
+
+    await writeLog({
+      room_id: roomId,
+      persona_id: room.persona,
+      speaker: "user",
+      message: text
+    });
+
+    // ================================
+    // 🧠 AI GENERATION
+    // ================================
+
+    const response = await memoryService.run({
+      text,
+      personaId: room.persona,
+      mode: room.mode,
+      mood: room.mood,
+      turn: room.turn
+    });
+
+    // ================================
+    // 🧾 OUTPUT LOG（AI）
+    // ================================
+
+    await writeLog({
+      room_id: roomId,
+      persona_id: room.persona,
+      speaker: "ai",
+      message: response
+    });
+
+    // ================================
+    // 🔁 TURN UPDATE
+    // ================================
+
+    room.nextTurn();
+
+    // ================================
+    // 🔓 UNLOCK
+    // ================================
+
+    room.unlock();
+
+    return response;
+
+  } catch (err) {
+
+    console.error("🔥 MEETING ERROR:", err);
+
+    // 安全解除
+    room.unlock();
+
+    return "（会議処理エラー）";
+  }
+}
+
+// ================================
+// 📤 RESET FUNCTION（安全停止）
+// ================================
+
+function resetRoom(roomId) {
+
+  const room = getRoom(roomId);
+
+  // 新規処理停止モード
+  room.reset();
+
+  console.log("🧨 ROOM RESET:", roomId);
+}
+
+// ================================
 // 📤 EXPORT
-// ========================================
+// ================================
+
 module.exports = {
-  handleMeeting // 外部公開
+  handleMeeting,
+  resetRoom,
+  getRoom
 };
