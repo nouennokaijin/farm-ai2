@@ -24,62 +24,61 @@ const sessionSearchHistory = new Map();
 // 🚫 検索制御（Throttle統合）
 // ========================================
 function canSearch(sessionId, query) {
-  const now = Date.now(); // 現在時刻取得
+  const now = Date.now();
 
-  if (!sessionId) sessionId = "global"; // セッション未指定時はglobal扱い
+  if (!sessionId) sessionId = "global";
 
   if (!sessionSearchHistory.has(sessionId)) {
-    sessionSearchHistory.set(sessionId, []); // 初期化
+    sessionSearchHistory.set(sessionId, []);
   }
 
-  const logs = sessionSearchHistory.get(sessionId); // 履歴取得
+  const logs = sessionSearchHistory.get(sessionId);
 
   // ① 10秒以内の連続検索制限
-  const recent = logs.filter(l => now - l.time < 10000); // 直近10秒抽出
+  const recent = logs.filter(l => now - l.time < 10000);
   if (recent.length >= 2) {
-    return false; // 検索過多防止
+    return false;
   }
 
   // ② 同一クエリ連打防止（60秒）
   if (logs.some(l => l.query === query && now - l.time < 60000)) {
-    return false; // 同じ検索禁止
+    return false;
   }
 
-  logs.push({ query, time: now }); // 履歴追加
+  logs.push({ query, time: now });
 
-  // 古いログ削除
   sessionSearchHistory.set(
     sessionId,
     logs.filter(l => now - l.time < 60000)
   );
 
-  return true; // 検索許可
+  return true;
 }
 
 // ========================================
 // 🧠 スコア計算
 // ========================================
 function calculateSearchScore(query, context = {}) {
-  let score = 0; // 初期スコア
+  let score = 0;
 
   // ① FORCEキーワード（強制検索）
   if (forceRules.force_keywords.some(k => query.includes(k))) {
-    score += 0.7; // 強制加点
+    score += 0.7;
   }
 
   // ② 不確実性（記憶不足）
   if (!context.summary || context.summary.length === 0) {
-    score += 0.2; // 情報不足加点
+    score += 0.2;
   }
 
   // ③ 長文（調査系）
   if (query.length > 25) {
-    score += 0.15; // 調査系加点
+    score += 0.15;
   }
 
   // ④ 高確信メモリは抑制
   if (context.confidence && context.confidence > 0.85) {
-    score -= 0.5; // 抑制
+    score -= 0.5;
   }
 
   // ⑤ 雑談系は抑制
@@ -87,10 +86,10 @@ function calculateSearchScore(query, context = {}) {
     query.includes("こんにちは") ||
     query.includes("ありがとう")
   ) {
-    score -= 0.6; // 雑談抑制
+    score -= 0.6;
   }
 
-  return score; // 最終スコア
+  return score;
 }
 
 // ========================================
@@ -99,54 +98,74 @@ function calculateSearchScore(query, context = {}) {
 async function webGate(query, context = {}) {
 
   const sessionId =
-    context.sessionId || context.session_id || "global"; // セッション取得
+    context.sessionId || context.session_id || "global";
 
   // ====================================
   // 🚫 ① 暴走防止チェック
   // ====================================
   if (!canSearch(sessionId, query)) {
     return {
-      query, // 入力クエリ
-      searched: false, // 未検索
-      ok: false, // 統一フラグ追加（重要）
-      reason: "throttled", // 制限理由
-      score: 0, // スコア
-      data: null // データなし
+      query,
+      searched: false,
+      ok: false,
+      reason: "throttled",
+      score: 0,
+      data: null
     };
   }
 
   // ====================================
   // 🧠 ② スコア計算
   // ====================================
-  const score = calculateSearchScore(query, context); // スコア算出
+  const score = calculateSearchScore(query, context);
 
-  const shouldSearch =
-    score > 0.4; // 閾値判定
+  // ====================================
+  // 🚨 ★追加修正：強制検索ルート
+  // ====================================
+  const forceHit = forceRules.force_keywords.some(k =>
+    query.includes(k)
+  );
+
+  // 強制キーワードがヒットした場合はスコア無視で検索実行
+  if (forceHit) {
+    const result = await searchAdapter(query);
+
+    return {
+      query,
+      searched: true,
+      ok: true,
+      force: true,
+      score: 1,
+      reason: "force_keyword",
+      data: result.results || []
+    };
+  }
+
+  const shouldSearch = score > 0.4;
 
   // ====================================
   // 🧭 ③ 検索不要
   // ====================================
   if (!shouldSearch) {
     return {
-      query, // 入力クエリ
-      searched: false, // 検索なし
-      ok: true, // 内部知識扱い（重要：成功扱い）
-      score, // スコア
-      reason: "internal knowledge sufficient", // 理由
-      data: null // データなし
+      query,
+      searched: false,
+      ok: true,
+      score,
+      reason: "internal knowledge sufficient",
+      data: null
     };
   }
 
   // ====================================
   // 🌐 ④ 実行（searchAdapter直結）
   // ====================================
-  const result = await searchAdapter(query); // 外部検索実行
+  const result = await searchAdapter(query);
 
   // ====================================
   // 🧠 ⑤ 出力統一（重要修正）
   // ====================================
 
-  // ❌ 空・未定義・失敗を正規化
   if (!result || result.ok === false) {
     return {
       query,
@@ -158,7 +177,6 @@ async function webGate(query, context = {}) {
     };
   }
 
-  // ✅ 正常系（空でも意味を保持）
   return {
     query,
     searched: true,
