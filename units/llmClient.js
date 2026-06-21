@@ -42,15 +42,26 @@ function buildPrompt(context) {
   // ====================================
   // 会話履歴整形
   // ====================================
-  const recentLogs =
-    logs.length > 0
-      ? logs
-          .map(
-            log =>
-              `[${log.speaker}] ${log.message}`
+//  const recentLogs =
+//    logs.length > 0
+//      ? logs
+//          .map(
+//            log =>
+//              `[${log.speaker}] ${log.message}`
+//         )
+//          .join("\n")
+//      : "No conversation history.";
+
+    const recentLogs =
+      logs.length > 0
+        ? [...logs]
+                .reverse()
+                .map(
+                  log =>
+                    `[${log.speaker}] ${log.message}`
           )
-          .join("\n")
-      : "No conversation history.";
+           .join("\n")
+        : "No conversation history.";
 
   // ====================================
   // Web整形
