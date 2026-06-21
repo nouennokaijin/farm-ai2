@@ -1,18 +1,18 @@
 // ========================================
-// 📁 FILE: services/retrievalService.js
+// 📁 FILE: retrievalService.js
 // 📂 FOLDER: services
-// 📅 DATE: 2026-06-20 (final design)
+// 📅 DATE: 2026-06-21
 // 👤 AUTHOR: OKIURA KAZUO
 // ========================================
 //
 // 🧠 SUMMARY
-// retrievalService（統合検索エンジン最終形）
+// 統合検索エンジン
 //
-// ・Supabase検索（記憶）
-// ・WebGateUnit（判断）
-// ・searchAdapter（実行）
-// ・Drive検索（将来）
-// ・Context生成
+// ・Supabase記憶検索
+// ・Web検索
+// ・Drive検索
+// ・LLM用Context生成
+// ・Context生成ログ出力
 //
 // ========================================
 
@@ -32,37 +32,53 @@ async function build({
 }) {
 
   // ====================================
-  // 🧠 ① Supabase（記憶）
+  // 🧠 ① Supabase検索
   // ====================================
-  const dbLogs = await SupabaseSearchUnit.search({
-    roomId,
-    limit: 10
-  });
+  const dbLogs =
+    await SupabaseSearchUnit.search({
+      roomId,
+      limit: 10
+    });
 
   // ====================================
-  // 🌐 ② WebGate（判断 → 直接実行）
+  // 🌐 ② Web検索
   // ====================================
-  const web = await WebGateUnit.webGate(query, {
-    history: session?.histories?.[personaId],
-    summary: session?.summaries?.[personaId],
-    executor: searchAdapter // ← ★追加（直結）
-  });
+  const web =
+    await WebGateUnit.webGate(query, {
+      history: session?.histories?.[personaId],
+      summary: session?.summaries?.[personaId],
+      executor: searchAdapter
+    });
 
   // ====================================
-  // 📦 ③ Drive（未来）
+  // 📦 ③ Drive検索
   // ====================================
-  const drive = await GoogleDriveSearchUnit.search({
-    query
-  });
+  const drive =
+    await GoogleDriveSearchUnit.search({
+      query
+    });
 
   // ====================================
   // 🧠 ④ Context生成
   // ====================================
   const context = buildContext({
+    query,
     dbLogs,
     web,
     drive
   });
+
+  // ====================================
+  // 🧠 LOG① Context生成時
+  // ====================================
+  console.log("================================");
+  console.log("CONTEXT GENERATED");
+  console.log("ROOM:", roomId);
+  console.log("QUERY:", query);
+  console.log("DB COUNT:", context.db.length);
+  console.log("WEB COUNT:", context.web.length);
+  console.log("DRIVE COUNT:", context.drive.length);
+  console.log("================================");
 
   return context;
 }
@@ -70,26 +86,36 @@ async function build({
 // ========================================
 // CONTEXT BUILDER
 // ========================================
-function buildContext({ dbLogs, web, drive }) {
+function buildContext({
+  query,
+  dbLogs,
+  web,
+  drive
+}) {
 
   return {
-    // 🧠 FIX①: LLMが期待している memory 層を追加（重要）
-    // これが無いと「初対面AI」になる
-    memory: dbLogs.map(log => log.message),
 
-    // 🧠 DBログをLLM用フォーマットへ変換
-    db: dbLogs.map(log => ({
-      role: log.speaker,
-      content: log.message,
-      time: log.created_at
+    // ユーザー入力
+    query: query || "No user input.",
+
+    // 会話履歴
+    db: (dbLogs || []).map(log => ({
+      speaker: log.speaker || "unknown",
+      message: log.message || "",
+      time: log.created_at || null
     })),
 
-    // 🌐 Web検索結果（安全フォールバック付き）
+    // Web結果
     web: web?.data?.results || web || [],
 
-    // 📦 Drive検索結果（将来拡張用）
+    // Drive結果
     drive: drive || []
   };
 }
 
-module.exports = { build };
+// ========================================
+// EXPORT
+// ========================================
+module.exports = {
+  build
+};
