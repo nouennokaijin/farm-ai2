@@ -1,0 +1,103 @@
+*{
+    box-sizing:border-box;
+}
+
+body{
+    margin:0;
+    background:#0a0a0a;
+    color:white;
+    font-family:sans-serif;
+}
+
+.container{
+    max-width:1000px;
+    margin:auto;
+    padding:20px;
+}
+
+.header{
+    text-align:center;
+    margin-bottom:20px;
+}
+
+.header h1{
+    color:gold;
+    margin-bottom:5px;
+}
+
+.chatLog{
+    height:70vh;
+    overflow-y:auto;
+
+    background:#111;
+
+    border:1px solid #333;
+
+    padding:20px;
+
+    border-radius:12px;
+}
+
+.userMessage{
+    text-align:right;
+    margin-bottom:12px;
+}
+
+.userBubble{
+    display:inline-block;
+
+    background:#1976d2;
+
+    padding:10px 14px;
+
+    border-radius:12px;
+
+    max-width:70%;
+}
+
+.albedoMessage{
+    text-align:left;
+    margin-bottom:12px;
+}
+
+.albedoBubble{
+    display:inline-block;
+
+    background:#4a148c;
+
+    color:#fff;
+
+    padding:10px 14px;
+
+    border-radius:12px;
+
+    max-width:70%;
+}
+
+.inputArea{
+    margin-top:20px;
+
+    display:flex;
+
+    gap:10px;
+}
+
+#messageInput{
+    flex:1;
+
+    padding:12px;
+
+    font-size:16px;
+}
+
+#sendButton{
+    width:120px;
+
+    border:none;
+
+    background:gold;
+
+    cursor:pointer;
+
+    font-weight:bold;
+}

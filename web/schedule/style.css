@@ -1,13 +1,147 @@
-body {
-  font-family: sans-serif;
-  margin: 20px;
-  background: #f5f6fa;
-  color: #2d3436;
+
+body{
+    background:#111; /*linear-gradient(145deg,#1a1a1a,#0f0f0f);*/
 }
 
-h1 {
-  text-align: center;
-  margin-bottom: 20px;
+.frame{
+    /*margin:30px;
+    padding:25px;
+    border:1px solid #d7a45b;*/
+    
+    position:relative;
+    padding:5px 20px;
+    margin:30px;
+    user-select:none;
+
+    color:#b89a55;
+    background:linear-gradient(145deg,#1a1a1a,#0f0f0f);
+    border:1px solid #6d5522;
+    border-radius:8px;
+
+    transition:.25s;
+    overflow:hidden;
+
+    box-shadow:
+        inset 0 0 0 rgba(0,0,0,0),
+        0 0 0 rgba(0,0,0,0);
+}
+
+.frame-inner{
+    /*margin-top:20px;
+    padding:15px;
+    background:#1a1a1a;
+    margin:1px auto;*/ /* 中央配置 */
+  
+    position:relative;
+    user-select:none;
+    border:0px solid #d7a45b;
+    color:#b89a55;
+}
+
+/* 王座の間 */
+.card{
+    padding:5px;
+    border:0px solid #d7a45b;
+    min-height:200px;
+    position:relative;
+    cursor:pointer;
+    margin:1px auto; /* 中央配置 */
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* タイトル */
+.card h2{
+    color:#ffd700;
+    font-size:28px;
+    letter-spacing:4px;
+    transition:.4s;
+    text-shadow:0 0 15px rgba(255,215,0,.4);
+}
+
+.card p{
+    color:#d7a45b;
+    font-size:16px;
+    font-weight:bold;
+/*    text-align:center;*/
+    margin:0 0 10px 0;
+}
+
+/* 通常テキスト */
+.subtitle{
+    color:#d7a45b;
+    font-size:16px;
+}
+
+/* 🔻隠し碑文 */
+.secret-note{
+    margin-top:20px;
+    font-size:14px;
+    color:rgba(215,164,91,0.22);
+    opacity:0;
+    transition:.6s;
+    user-select:none;
+    pointer-events:none;
+    line-height:1.6;
+}
+
+.card.stage1 .secret-note{
+    opacity:1;
+}
+
+.card.stage2 .secret-note{
+    opacity:1;
+    color:rgba(215,164,91,0.85);
+}
+
+/* 開放状態 */
+.card.active .secret-note{
+    opacity:1;
+}
+
+/* メニュー */
+.menu-item{
+    position:relative;
+    padding:12px 14px;
+    margin-top:12px;
+    cursor:pointer;
+    user-select:none;
+
+    color:#b89a55;
+    background:linear-gradient(145deg,#1a1a1a,#0f0f0f);
+    border:1px solid #6d5522;
+    border-radius:8px;
+
+    transition:.25s;
+}
+
+.menu-item:hover{
+    background:linear-gradient(145deg,#222,#111);
+    border-color:#a8842f;
+}
+.advisor{
+    display:flex;
+    gap:12px;
+    margin-top:20px;
+    padding:15px;
+    background:#1a1a1a;
+    border:1px solid #d7a45b;
+    border-radius:8px;
+}
+
+.title{
+    font-size:18px;
+    font-weight:bold;
+    color:gold;
+    text-align:right;
+    padding:0px;
+    margin:0;
+}
+.title p{
+    font-size:16px;
+    font-weight: normal;
+    color:#d7a45b;
+    text-align:right;
+    margin:0;
 }
 
 /* =====================
