@@ -14,7 +14,7 @@
 // ========================================
 
 const express = require("express");
-require("dotenv").config();
+//require("dotenv").config();
 
 // 🧠 中枢AI dispatcher
 const { dispatcher } = require("./secretary/dispatcher");

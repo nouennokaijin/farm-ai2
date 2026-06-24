@@ -17,6 +17,10 @@
 //   OKIURA KAZUO
 // ========================================
 
+
+//require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") })
+
+
 const Groq = require("groq-sdk");
 
 // ========================================
@@ -65,7 +69,6 @@ async function chat({
     ) {
       tokenLimit = max_tokens;
     } else {
-      // デフォルト値
       tokenLimit = 30;
     }
 
