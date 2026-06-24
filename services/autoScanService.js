@@ -2,6 +2,7 @@
 // created: 2026-06-24
 // author: OKIURA KAZUO
 // purpose: Drive全体スキャンの統括制御（司令塔）
+// note: Google認証は環境変数（GOOGLE_CREDENTIALS）ベースで動作
 
 //require("dotenv").config(); // 環境変数読み込み（Renderでは不要）
 
@@ -39,7 +40,8 @@ function saveDB(db) {
     fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 }
 
-// Google Drive接続
+// ===== Google Drive接続（認証は環境変数ベース） =====
+// GOOGLE_CREDENTIALS はJSON文字列として環境変数に格納されている前提
 async function getDrive() {
 
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
@@ -70,7 +72,7 @@ async function scanFolder(drive, folderId, db) {
 
     for (const file of files) {
 
-        // ===== 除外フォルダチェック（追加） =====
+        // ===== 除外フォルダチェック（軽量フィルタ） =====
         if (isExcludedPath(file.name)) {
             console.log("⛔ 除外:", file.name);
             continue;
@@ -88,14 +90,14 @@ async function scanFolder(drive, folderId, db) {
             continue;
         }
 
-        // 既に登録済みならスキップ
+        // 既に登録済みならスキップ（重複防止）
         const exists = db.items.find(i => i.source_path === file.id);
         if (exists) continue;
 
-        // フルパス生成（フォルダ階層）
+        // フルパス生成（フォルダ階層を再現）
         const fullPath = await buildFullPath(drive, file);
 
-        // ファイル分類（重要ロジック）
+        // ファイル分類（AI処理分岐の中核）
         const type = classify(file);
 
         let summary = "";
@@ -117,7 +119,7 @@ async function scanFolder(drive, folderId, db) {
             summary = file.name;
         }
 
-        // ===== DB登録 =====
+        // ===== DB登録（インデックス構築） =====
         db.items.push({
             id: Date.now().toString(),
             title: file.name,
@@ -136,7 +138,7 @@ async function scanFolder(drive, folderId, db) {
     }
 }
 
-// ===== main処理 =====
+// ===== main処理（エントリーポイント） =====
 async function main() {
 
     const db = loadDB();
@@ -144,6 +146,7 @@ async function main() {
 
     console.log("スキャン開始");
 
+    // ルートフォルダは環境変数で管理（固定値排除）
     const ROOT_FOLDER = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
     await scanFolder(drive, ROOT_FOLDER, db);
