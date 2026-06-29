@@ -342,3 +342,12 @@ FullCalendar調整
     width: 55px;
   }
 }
+
+/* =========================
+   FullCalendar
+========================= */
+
+.fc {
+    color: #4A2C17;
+    font-weight: 600;
+}

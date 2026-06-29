@@ -272,6 +272,28 @@ function initCalendar() {
 
     initialView: "dayGridMonth",
 
+  // ←ここに追加
+  dayCellDidMount(info) {
+
+    const day = info.date.getDay();
+
+    if (day === 0) {
+      info.el.style.backgroundColor = "#ffeaea";
+    }
+
+    if (day === 6) {
+      info.el.style.backgroundColor = "#eaf4ff";
+    }
+
+     // 今日
+     if (info.isToday) {
+        info.el.style.backgroundColor = "rgba(0, 128, 0, 0.3)";
+    }
+
+  },
+
+
+
     headerToolbar: {
       left: "prev,next today",
       center: "title",
