@@ -1,32 +1,49 @@
+<!-- =====================================================
+Nazarick Calendar v1.1
+
+日付      : 2026-07-21
+概要      : カレンダー画面
+フォルダ  : web/schedule/
+ファイル  : index.html
+作成者    : 沖浦和夫
+
+===================================================== -->
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
   <link rel="stylesheet" href="style.css" />
-<script src="...index.global.min.js"></script>
-<meta charset="UTF-8">
-<title>Nazarick Calendar v1.1</title>
-<style>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
+  <meta charset="UTF-8">
+  <title>Nazarick Calendar v1.1</title>
+  <style>
 
 
 
-</style>
+  </style>
 </head>
 
 <body>
+
 <div class="frame">
+
   <div class="title">
     📅 Nazarick Calendar v1.1
-  <br>
-  <p>思考は結晶となり、世界は静かに動き出す</p>
-  <br>
+    <br>
+    <p>思考は結晶となり、世界は静かに動き出す</p>
+    <br>
   </div>
+
   <div class="frame-inner">
     <div class="frame-inner" id="calendar"></div>
     <br>
   </div>
+
 </div>
+
 <br><br><br>
-    <!-- =========================
+
+<!-- =========================
      日別一覧モーダル
 ========================= -->
 
@@ -49,9 +66,13 @@
     </div>
 
     <div id="eventList"></div>
+
     <br>
+
   </div>
-    <br>
+
+  <br>
+
 </div>
 
 <!-- =========================
@@ -146,7 +167,6 @@
       id="eventMemo"
       placeholder="メモ">
     </textarea>
-
     <!-- ボタン -->
 
     <div class="toolbar">
@@ -164,15 +184,19 @@
       </button>
 
     </div>
-<br>
-    </div>
-<br>
+
+    <br>
+
+  </div>
+
+  <br>
+
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
 <script
   type="module"
   src="app.js">
 </script>
+
 </body>
 </html>
