@@ -78,6 +78,42 @@ safeStart("Discord Gateway", "./index.discord.js");
 app.use(express.json());
 app.use(express.static("web"));
 
+// ========================================
+// ✒️ 自省録保存 API
+// date   : 2026-08-01
+// author : OKIURA KAZUO
+//
+// 静謐の間から送られた自省録を
+// diaryService.js経由でGoogle Driveへ保存する
+// ========================================
+
+const { saveDiary } = require("./services/diaryService");
+
+
+app.post("/api/diary", async (req, res) => {
+
+    try {
+
+        await saveDiary(req.body.text);
+
+        res.json({
+            success: true,
+            message: "自省録保存完了"
+        });
+
+    } catch (err) {
+
+        console.error("自省録保存エラー", err);
+
+        res.status(500).json({
+            success: false,
+            error: err.message
+        });
+
+    }
+
+});
+
 app.use(
     "/api/talk",
     talkRouter
