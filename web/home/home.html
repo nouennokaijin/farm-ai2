@@ -1,174 +1,166 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<link rel="stylesheet" href="style.css" />
 <meta charset="UTF-8">
-<title>王座の間</title>
-<style>
-body{
-    background:#111; /*linear-gradient(145deg,#1a1a1a,#0f0f0f);*/
-}
-
-.frame{
-    /*margin:30px;
-    padding:25px;
-    border:1px solid #d7a45b;*/
-    
-    position:relative;
-    padding:5px 20px;
-    margin:30px;
-    user-select:none;
-
-    color:#b89a55;
-    background:linear-gradient(145deg,#1a1a1a,#0f0f0f);
-    border:1px solid #6d5522;
-    border-radius:8px;
-
-    transition:.25s;
-    overflow:hidden;
-
-    box-shadow:
-        inset 0 0 0 rgba(0,0,0,0),
-        0 0 0 rgba(0,0,0,0);
-}
-
-.frame-inner{
-    /*margin-top:20px;
-    padding:15px;
-    background:#1a1a1a;
-    margin:1px auto;*/ /* 中央配置 */
-  
-    position:relative;
-    user-select:none;
-    border:0px solid #d7a45b;
-    color:#b89a55;
-}
-
-/* 王座の間 */
-.card{
-    padding:5px;
-    border:0px solid #d7a45b;
-    min-height:200px;
-    position:relative;
-    cursor:pointer;
-    margin:1px auto; /* 中央配置 */
-    -webkit-tap-highlight-color: transparent;
-}
-
-/* タイトル */
-.card h2{
-    color:#ffd700;
-    font-size:28px;
-    letter-spacing:4px;
-    transition:.4s;
-    text-shadow:0 0 15px rgba(255,215,0,.4);
-}
-
-.card p{
-    color:#d7a45b;
-    font-size:16px;
-    font-weight:bold;
-/*    text-align:center;*/
-    margin:0 0 10px 0;
-}
-
-/* 通常テキスト */
-.subtitle{
-    color:#d7a45b;
-    font-size:16px;
-}
-
-/* 🔻隠し碑文 */
-.secret-note{
-    margin-top:20px;
-    font-size:14px;
-    color:rgba(215,164,91,0.22);
-    opacity:0;
-    transition:.6s;
-    user-select:none;
-    pointer-events:none;
-    line-height:1.6;
-}
-
-.card.stage1 .secret-note{
-    opacity:1;
-}
-
-.card.stage2 .secret-note{
-    opacity:1;
-    color:rgba(215,164,91,0.85);
-}
-
-/* 開放状態 */
-.card.active .secret-note{
-    opacity:1;
-}
-
-/* メニュー */
-.menu-item{
-    position:relative;
-    padding:12px 14px;
-    margin-top:12px;
-    cursor:pointer;
-    user-select:none;
-
-    color:#b89a55;
-    background:linear-gradient(145deg,#1a1a1a,#0f0f0f);
-    border:1px solid #6d5522;
-    border-radius:8px;
-
-    transition:.25s;
-}
-
-.menu-item:hover{
-    background:linear-gradient(145deg,#222,#111);
-    border-color:#a8842f;
-}
-.advisor{
-    display:flex;
-    gap:12px;
-    margin-top:20px;
-    padding:15px;
-    background:#1a1a1a;
-    border:1px solid #d7a45b;
-    border-radius:8px;
-}
-
-.title{
-    font-size:18px;
-    font-weight:bold;
-    color:gold;
-    text-align:right;
-    padding:0px;
-    margin:0;
-}
-.title p{
-    font-size:16px;
-    font-weight: normal;
-    color:#d7a45b;
-    text-align:right;
-    margin:0;
-}
-
-</style>
+<title>静謐の間</title>
 </head>
 
 <body>
 <div class="frame">
   <div class="title">
-    👑 王座の間
+　　⚜️ 静謐の間
   <br>
-  <p>全てを見渡し、決断する</p>
+  <p>すべては我らが王のために</p>
 </div>
   <div id="today">
   日付取得中...
   </div><br>
     <div class="frame-inner">
-        <div class="card" id="throne">
-                <div class="secret-note">
-                このWEBアプリは「ナザリック地下大墳墓」の世界観に着想を得た個人用構築物である。
+    <div class="grid">
+        <!-- 本日の予定 -->
+        <div class="diary-card">
+            <h2>
+                <span style="font-size:26px;color:#ffd700;">📅</span>
+                本日の予定
+            </h2>
+            <div class="event">
+                07:00<br>
+                農作業確認
+            </div>
+
+            <div class="event">
+                17:10<br>
+                移動
+            </div>
+
+            <div class="event">
+                20:00〜22:00<br>
+                すき家勤務
+            </div>
+
+        </div>
+
+
+
+        <!-- 本日の課題 -->
+        <div class="diary-card">
+
+            <h2>
+                <span style="font-size:26px;color:#ffd700;">📜</span>
+                本日の課題
+            </h2>
+
+            <p>☑ カレンダー確認</p>
+
+            <p>□ 日報入力</p>
+
+            <p>□ 農作業記録</p>
+
+        </div>
+
+
+
+        <!-- セバス報告 -->
+        <div class="diary-card">
+
+            <h2>
+                <span style="font-size:26px;color:#ffd700;">☕</span>
+                セバス報告
+            </h2>
+
+            <div class="message">
+
+                「主人、本日の予定を確認いたしました。」
+
                 <br><br>
 
-                ナザリック地下大墳墓（構造記録 農園の怪人要約）<br>
+                「現在、緊急事項はございません。」
+
+            </div>
+
+        </div>
+
+
+
+        <!-- 守護者通信 -->
+        <div class="diary-card">
+
+            <h2>
+                <span style="font-size:26px;color:#ffd700;">🛡️</span>
+                守護者通信
+            </h2>
+
+            <p>
+                アルベド：<br>
+                計画を確認しますか？
+            </p>
+
+            <p>
+                デミウルゴス：<br>
+                改善点を分析できます。
+            </p>
+
+            <button>
+                守護者を呼ぶ
+            </button>
+
+        </div>
+        <!-- 自省録 -->
+        <div class="diary">
+
+            <h2>
+                <span style="font-size:26px;color:#ffd700;">✒️</span>
+                自省録
+            </h2>
+
+            <p style="color:#d7a45b;margin-bottom:12px;">
+                今日の出来事・反省・気付きを記録します。
+            </p>
+
+<textarea
+    id="diaryText"
+    class="diary-textarea"
+    placeholder="今日感じたこと、改善点、明日への課題を書き残します。"
+></textarea>
+
+<div style="margin-top:15px;text-align:right;">
+    <button id="saveDiaryBtn" class="gold-btn">
+        💾 自省録を保存
+    </button>
+</div>
+
+<div id="saveResult"></div>
+        </div>
+
+    </div>
+
+
+
+
+
+
+
+
+
+
+
+        <div class="card" id="throne">
+                <div class="secret-note">
+                このWEBアプリは「オーバーロード」の世界観に着想を得た個人用構築物である。
+                <br><br>
+　ナザリックは、日常生活、仕事、農業、学習、情報管理など、あらゆる活動を支援するために開発されている個人用執務システムである。<br>
+ 名称やデザイン、世界観は『オーバーロード』から大きな影響を受けているが、本システムは作品を再現することを目的としたファンサイトではない。オーバーロードは発想の原点であり、その世界観を設計思想へ取り入れることで、機能や役割を直感的に理解できる環境を目指している。<br>
+ 本システムの目的は、多機能なアプリケーションを作ることではない。利用者が日々扱う情報を整理し、考え、判断し、行動へ結び付けるための執務環境を構築することである。情報を蓄積するだけでは価値は生まれない。蓄積した情報を知識へ変え、知識を判断へ、判断を行動へ変換して初めて意味を持つ。その一連の流れを支援することが、ナザリックの存在意義である。<br>
+ ナザリックの世界観は単なる装飾ではない。施設や守護者は、それぞれが担う役割を分かりやすく表現するための設計言語である。名前や雰囲気を借りることで、利用者は各機能を自然に理解し、目的に応じて迷うことなく利用できる。世界観は演出ではなく、使いやすさを高めるためのインターフェースとして位置付けられている。<br>
+ また、本システムには複数のAIが存在するが、それらは利用者に代わって意思決定を行う存在ではない。AIは情報を整理し、分析し、提案を行う補佐役であり、最終的な判断は常に利用者自身が行う。この考え方は、本システム全体を貫く基本理念である。<br>
+ ナザリックは日々の経験や行動、知識の蓄積による新たな発想から、次のステージを模索し、提案することを目指すシステムである。現実に役立つことを最優先とし、自分にとって本当に必要な機能だけを積み重ねていく。その結果として生まれるのは、誰かのためのアプリではなく、利用者自身に最適化された唯一無二の執務OSである。 静謐の間に掲げられた「すべては我らが王のために」という言葉は、本システム全体の理念を象徴している。ここでいう「王」とは『オーバーロード』の登場人物ではなく、本システムを利用する者自身を指す。ナザリックに存在するすべての機能とAIは、利用者の思考と行動を支え、より良い日々を実現するために存在している。<br>
+<br>
+<br>
+
+
+
+                オリジナルのナザリック地下大墳墓について<br>
                 ナザリック地下大墳墓は、異世界転移以前より存在していたギルド拠点であり、そ本質は単なるダンジョンではなく、複数階層にわたり設計された統合型支配構造である。表層的には巨大な地下墳墓として認識されるが、その内部は単純な迷宮構造ではなく、明確な意図と役割分担によって構築された“階層都市”に近い。<br><br>
 
                 第一階層から第三階層までは、外敵の侵入を想定した防衛領域であり、心理的圧迫を目的とした空間設計が施されている。視界の制限、反響音の異常、光源の不均一性など、侵入者の認知を徐々に歪める構造が特徴である。これは物理的な戦闘以前に、精神的な消耗を誘発するための初期防衛機構とされる。<br><br>
