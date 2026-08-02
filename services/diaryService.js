@@ -161,10 +161,26 @@ async function createJsonFile(
     });
 
 
-    // 空ファイル枠の作成に成功した後、中身のストリームをアップデート経由で流し込む
-    await drive.files.update({
+    const copyRes = await drive.files.copy({
 
         fileId: res.data.id,
+
+        requestBody: {
+
+            name: filename,
+
+            parents: [folderId]
+
+        },
+
+        supportsAllDrives: true
+
+    });
+
+
+    await drive.files.update({
+
+        fileId: copyRes.data.id,
 
         media:{
 
@@ -180,6 +196,13 @@ async function createJsonFile(
     });
 
 
+    try {
+
+        await drive.files.delete({ fileId: res.data.id, supportsAllDrives: true });
+
+    } catch (e) {}
+
+
     console.log(
 
         "ファイル保存:",
@@ -189,8 +212,7 @@ async function createJsonFile(
     );
 
 
-    // 作成したファイルのIDを返却
-    return res.data.id;
+    return copyRes.data.id;
 
 }
 
@@ -381,7 +403,6 @@ async function saveDiary(text){
     );
 
 
-    // 親フォルダの権限をファイル自体にも継承させ、人間側から削除・管理可能にする処理
     try {
         await drive.permissions.create({
             fileId: fileId,
@@ -416,39 +437,3 @@ module.exports = {
 
 
 };
-
-// =====================================================
-// 【緊急用】消せないフォルダを強制削除する使い捨て処理
-// =====================================================
-// このファイルが読み込まれたら一度だけ自動実行されます。
-// 不要になったらこの下のコードは丸ごと削除してください。
-// =====================================================
-(async function() {
-    try {
-        console.log("⏳ 【強制削除】処理を開始します...");
-        const drive = await getDrive();
-        
-        // 消したい「自省録」フォルダの検索
-        const search = await drive.files.list({
-            q: `'${ROOT_FOLDER}' in parents and name='自省録' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-            fields: "files(id,name)"
-        });
-
-        if (search.data.files.length === 0) {
-            console.log("✨ 【強制削除】削除対象の「自省録」フォルダが見つかりませんでした。（すでに消えているか、親IDが違います）");
-            return;
-        }
-
-        // 見つかったフォルダをループして完全に削除
-        for (const file of search.data.files) {
-            console.log(`🗑️ 【強制削除】フォルダ「${file.name}」(ID: ${file.id}) を抹消中...`);
-            await drive.files.delete({
-                fileId: file.id,
-                supportsAllDrives: true
-            });
-            console.log(`✅ 【強制削除】「${file.name}」の完全削除に成功しました。`);
-        }
-    } catch (e) {
-        console.error("❌ 【強制削除】エラーが発生しました:", e.message);
-    }
-})();
