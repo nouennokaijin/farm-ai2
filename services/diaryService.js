@@ -154,22 +154,28 @@ async function createJsonFile(
 
         },
 
+        supportsAllDrives: true, 
+
+        keepRevisionForever: false
+
+    });
+
+
+    // 空ファイル枠の作成に成功した後、中身のストリームをアップデート経由で流し込む
+    await drive.files.update({
+
+        fileId: res.data.id,
 
         media:{
-
 
             mimeType:
             "application/json",
 
-
             body:stream
-
 
         },
 
-        supportsAllDrives: true, 
-
-        keepRevisionForever: false
+        supportsAllDrives: true
 
     });
 
