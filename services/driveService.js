@@ -17,7 +17,7 @@ const { google } = require("googleapis");
 // Google Drive 接続
 // =====================================================
 // 環境変数
-// GOOGLE_CREDENTIALS
+// GOOGLE_CREDENTIALS_JSON
 // に保存された認証情報を使用する
 // =====================================================
 
@@ -25,7 +25,7 @@ async function getDrive(){
 
     const credentials =
         JSON.parse(
-            process.env.GOOGLE_CREDENTIALS
+            process.env.GOOGLE_CREDENTIALS_JSON
         );
 
 
