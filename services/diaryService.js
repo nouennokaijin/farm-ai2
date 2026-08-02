@@ -135,15 +135,12 @@ async function createJsonFile(
         );
 
 
-
+    // 空枠作成を完全に廃止し、直接ストリームデータを流し込んでファイルを作成するAPI構造に変更
     const res = await drive.files.create({
-
 
         requestBody:{
 
-
             name:filename,
-
 
             parents:[
 
@@ -151,36 +148,7 @@ async function createJsonFile(
 
             ]
 
-
         },
-
-        supportsAllDrives: true, 
-
-        keepRevisionForever: false
-
-    });
-
-
-    const copyRes = await drive.files.copy({
-
-        fileId: res.data.id,
-
-        requestBody: {
-
-            name: filename,
-
-            parents: [folderId]
-
-        },
-
-        supportsAllDrives: true
-
-    });
-
-
-    await drive.files.update({
-
-        fileId: copyRes.data.id,
 
         media:{
 
@@ -191,16 +159,11 @@ async function createJsonFile(
 
         },
 
-        supportsAllDrives: true
+        supportsAllDrives: true, 
+
+        keepRevisionForever: false
 
     });
-
-
-    try {
-
-        await drive.files.delete({ fileId: res.data.id, supportsAllDrives: true });
-
-    } catch (e) {}
 
 
     console.log(
@@ -212,7 +175,7 @@ async function createJsonFile(
     );
 
 
-    return copyRes.data.id;
+    return res.data.id;
 
 }
 
