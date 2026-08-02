@@ -165,9 +165,11 @@ async function createJsonFile(
             body:stream
 
 
-        }
-
-
+        },
+        // 👇 ここから追加：サービスアカウントの容量エラーを回避する設定
+        supportsAllDrives: true, 
+        keepRevisionForever: false
+        // 👆 ここまで追加
     });
 
 
