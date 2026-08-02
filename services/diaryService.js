@@ -136,7 +136,7 @@ async function createJsonFile(
 
 
 
-    await drive.files.create({
+    const res = await drive.files.create({
 
 
         requestBody:{
@@ -166,10 +166,11 @@ async function createJsonFile(
 
 
         },
-        // 👇 ここから追加：サービスアカウントの容量エラーを回避する設定
+
         supportsAllDrives: true, 
+
         keepRevisionForever: false
-        // 👆 ここまで追加
+
     });
 
 
@@ -180,6 +181,10 @@ async function createJsonFile(
         filename
 
     );
+
+
+    // 作成したファイルのIDを返却
+    return res.data.id;
 
 }
 
@@ -352,7 +357,7 @@ async function saveDiary(text){
     // =================================================
 
 
-    await createJsonFile(
+    const fileId = await createJsonFile(
 
 
         drive,
@@ -368,6 +373,21 @@ async function saveDiary(text){
 
 
     );
+
+
+    // 親フォルダの権限をファイル自体にも継承させ、人間側から削除・管理可能にする処理
+    try {
+        await drive.permissions.create({
+            fileId: fileId,
+            supportsAllDrives: true,
+            requestBody: {
+                role: 'writer',
+                type: 'anyone'
+            }
+        });
+    } catch (e) {
+        console.error("権限付与エラー:", e.message);
+    }
 
 
 
