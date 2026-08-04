@@ -1,50 +1,40 @@
 // =====================================================
 // folder : services
 // file   : diaryService.js
-// date   : 2026-08-01
+// date   : 2026-08-04
 // author : OKIURA KAZUO
 // purpose: 自省録保存サービス
 // note   :
-//   静謐の間で入力した自省録をGoogle Driveへ保存する。
-//   保存先:
-//   大図書館
-//      └── 自省録
-//          └── 年
-//              └── 月
-//                  └── YYYY-MM-DD.json
 //
-//   マルチタグ生成機能を搭載。
+// 静謐の間で入力した自省録を
+// 大図書館へJSON形式で保存する。
+//
+// 保存先
+//
+// 大図書館
+//    └── 自省録
+//          └── 年
+//                └── 月
+//                      └── YYYY-MM-DD_001.json
+//
+// AIタグ・AI要約は後日実装予定。
+// 現在はJSON保存のみ行う。
+//
 // =====================================================
 
-
-
-const { Readable } = require("stream");
-
+const path = require("path");
 
 const {
 
-    getDrive,
+    DIARY_PATH,
 
-    getOrCreateFolder
+    saveJson,
 
-} = require("./driveService");
+    ensureDir,
 
+    getNextDiaryNumber
 
-
-
-// =====================================================
-// Google Drive 保存先
-//
-// Render環境変数
-// GOOGLE_DRIVE_FOLDER_ID
-//
-// 内容:
-// 大図書館フォルダID
-// =====================================================
-
-const ROOT_FOLDER =
-    process.env.GOOGLE_DRIVE_FOLDER_ID;
-
+} = require("./libraryService");
 
 
 
@@ -52,11 +42,10 @@ const ROOT_FOLDER =
 // 自省録タグ生成
 //
 // 現在はキーワード方式。
-// 後ほどAI分類へ交換可能。
+// 後ほどAI分類へ交換予定。
 // =====================================================
 
 function generateTags(text){
-
 
     const keywords = [
 
@@ -88,104 +77,23 @@ function generateTags(text){
 
     ];
 
-
-
     return keywords.filter(
+
         keyword =>
+
             text.includes(keyword)
-    );
-
-}
-
-
-
-
-// =====================================================
-// JSONファイル作成
-//
-// Google DriveへJSONファイルを保存する。
-// =====================================================
-
-async function createJsonFile(
-
-    drive,
-
-    folderId,
-
-    filename,
-
-    data
-
-){
-
-
-    const stream =
-        Readable.from(
-
-            [
-
-                JSON.stringify(
-                    data,
-                    null,
-                    2
-                )
-
-            ]
-
-        );
-
-
-    // 空枠作成を完全に廃止し、直接ストリームデータを流し込んでファイルを作成するAPI構造に変更
-    const res = await drive.files.create({
-
-        requestBody:{
-
-            name:filename,
-
-            parents:[
-
-                folderId
-
-            ]
-
-        },
-
-        media:{
-
-            mimeType:
-            "application/json",
-
-            body:stream
-
-        },
-
-        supportsAllDrives: true, 
-
-        keepRevisionForever: false
-
-    });
-
-
-    console.log(
-
-        "ファイル保存:",
-
-        filename
 
     );
 
-
-    return res.data.id;
-
 }
-
 
 
 
 // =====================================================
 // 自省録保存メイン処理
 //
-// 引数:
+// 引数
+//
 // text
 // 静謐の間から送られた本文
 //
@@ -193,21 +101,12 @@ async function createJsonFile(
 
 async function saveDiary(text){
 
-
-
-    const drive =
-        await getDrive();
-
-
-
-
     const now =
         new Date();
 
 
 
-
-    // 日付生成
+    // 年月日生成
 
     const year =
         String(
@@ -215,224 +114,168 @@ async function saveDiary(text){
         );
 
 
+
     const month =
         String(
-            now.getMonth()+1
-        )
-        .padStart(2,"0");
+            now.getMonth() + 1
+        ).padStart(
+            2,
+            "0"
+        );
 
 
 
     const day =
         String(
             now.getDate()
-        )
-        .padStart(2,"0");
+        ).padStart(
+            2,
+            "0"
+        );
 
 
 
+    const date =
+        `${year}-${month}-${day}`;
 
-    // =================================================
-    // フォルダ構成
+
+
+    // ============================================
+    // 保存フォルダ
     //
-    // 大図書館
-    //    ↓
     // 自省録
     //    ↓
     // 年
     //    ↓
     // 月
-    //
-    // =================================================
-
-
-
-    const diaryFolder =
-
-        await getOrCreateFolder(
-
-            drive,
-
-            "自省録",
-
-            ROOT_FOLDER
-
-        );
-
-
-
-    const yearFolder =
-
-        await getOrCreateFolder(
-
-            drive,
-
-            year,
-
-            diaryFolder
-
-        );
-
-
+    // ============================================
 
     const monthFolder =
 
-        await getOrCreateFolder(
+        path.join(
 
-            drive,
+            DIARY_PATH,
 
-            month,
+            year,
 
-            yearFolder
+            month
 
         );
 
 
 
+    ensureDir(
+        monthFolder
+    );
+    // ============================================
+    // ファイル番号取得
+    //
+    // 同じ日に複数保存する場合
+    // YYYY-MM-DD_001.json
+    // YYYY-MM-DD_002.json
+    //
+    // のように連番化
+    // ============================================
+
+    const number =
+
+        getNextDiaryNumber(
+
+            monthFolder,
+
+            date
+
+        );
 
 
-    // =================================================
-    // 保存データ作成
-    // =================================================
 
+    const filename =
 
-    const diary = {
-
-
-        date:
-
-        `${year}-${month}-${day}`,
+        `${date}_${number}.json`;
 
 
 
-        text:
+    const filePath =
 
+        path.join(
+
+            monthFolder,
+
+            filename
+
+        );
+
+
+
+    // ============================================
+    // 自省録データ生成
+    // ============================================
+
+    const diaryData = {
+
+
+        date,
+
+
+        createdAt:
+
+            now.toISOString(),
 
 
         text,
 
 
-
         tags:
 
+            generateTags(text),
 
 
-        generateTags(text),
+        summary:
 
-
-
-        created_at:
-
-
-
-        now.toISOString(),
-
-
-
-        updated_at:
-
-
-
-        now.toISOString()
-
+            null
 
 
     };
 
 
 
-
-
-    // =================================================
+    // ============================================
     // JSON保存
-    // =================================================
+    //
+    // 実際の保存処理は
+    // libraryService担当
+    // ============================================
 
+    await saveJson(
 
-    const fileId = await createJsonFile(
+        filePath,
 
-
-        drive,
-
-
-        monthFolder,
-
-
-        `${year}-${month}-${day}.json`,
-
-
-        diary
-
+        diaryData
 
     );
 
 
-    try {
-        await drive.permissions.create({
-            fileId: fileId,
-            supportsAllDrives: true,
-            requestBody: {
-                role: 'writer',
-                type: 'anyone'
-            }
-        });
-    } catch (e) {
-        console.error("権限付与エラー:", e.message);
-    }
 
+    return {
 
+        success:true,
 
-    console.log(
+        path:filePath,
 
-        "自省録登録完了"
+        data:diaryData
 
-    );
+    };
 
 }
 
 
 
-
+// =====================================================
+// export
+// =====================================================
 
 module.exports = {
 
-
     saveDiary
 
-
 };
-
-// =====================================================
-// 【緊急用】消せないフォルダを強制削除する使い捨て処理
-// =====================================================
-// このファイルが読み込まれたら一度だけ自動実行されます。
-// 不要になったらこの下のコードは丸ごと削除してください。
-// =====================================================
-(async function() {
-    try {
-        console.log("⏳ 【強制削除】処理を開始します...");
-        const drive = await getDrive();
-        
-        // 消したい「自省録」フォルダの検索
-        const search = await drive.files.list({
-            q: `'${ROOT_FOLDER}' in parents and name='自省録' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-            fields: "files(id,name)"
-        });
-
-        if (search.data.files.length === 0) {
-            console.log("✨ 【強制削除】削除対象の「自省録」フォルダが見つかりませんでした。（すでに消えているか、親IDが違います）");
-            return;
-        }
-
-        // 見つかったフォルダをループして完全に削除
-        for (const file of search.data.files) {
-            console.log(`🗑️ 【強制削除】フォルダ「${file.name}」(ID: ${file.id}) を抹消中...`);
-            await drive.files.delete({
-                fileId: file.id,
-                supportsAllDrives: true
-            });
-            console.log(`✅ 【強制削除】「${file.name}」の完全削除に成功しました。`);
-        }
-    } catch (e) {
-        console.error("❌ 【強制削除】エラーが発生しました:", e.message);
-    }
-})();
