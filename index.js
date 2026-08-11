@@ -23,6 +23,7 @@
 // ========================================
 // 📦 必要モジュール
 // ========================================
+require("dotenv").config();
 const http = require("http");
 const express = require("express");
 const path = require("path");
@@ -46,7 +47,7 @@ console.log("=================================");
 function safeStart(name, modulePath) {
 try {
 console.log("=================================");
-console.log("🟡 Starting ${name}...");
+console.log(`🟡 Starting ${name}...`);
 console.log("=================================");
 
 require(modulePath);
@@ -84,17 +85,17 @@ app.use(express.static("web"));
 // author : OKIURA KAZUO
 //
 // 静謐の間から送られた自省録を
-// diaryService.js経由でGoogle Driveへ保存する
+// documentService.js経由で大図書館へ文書を保存する
 // ========================================
 
-const { saveDiary } = require("./services/diaryService");
+const { saveDocument } = require("./services/documentService");
 
 
-app.post("/api/diary", async (req, res) => {
+app.post("/api/document", async (req, res) => {
 
     try {
 
-        await saveDiary(req.body.text);
+        await saveDocument(req.body.text);
 
         res.json({
             success: true,
@@ -160,7 +161,7 @@ time: new Date().toISOString(),
 // ========================================
 app.listen(PORT, () => {
 console.log("=================================");
-console.log("🌐 Web Server running on port ${PORT}");
+console.log(`🌐 Web Server running on port ${PORT}`);
 console.log("🌐 Unified Web : /");
 console.log("❤️ Health     : /health");
 console.log("=================================");
