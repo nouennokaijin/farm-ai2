@@ -1,9 +1,9 @@
 // =====================================================
 // folder : web/home
-// file   : diaryApp.js
+// file   : documentApp.js
 // date   : 2026-08-01
 // author : OKIURA KAZUO
-// purpose: 静謐の間 自省録登録
+// purpose: 静謐の間 登録
 // note   :
 //   保存ボタンからserver.jsへ送信する。
 // =====================================================

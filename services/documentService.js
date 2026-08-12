@@ -183,7 +183,7 @@ async function saveDocument(text){
 
     const number =
 
-        getNextDiaryNumber(
+        await getNextDiaryNumber(
 
             monthFolder,
 
@@ -192,11 +192,12 @@ async function saveDocument(text){
         );
 
 
+//    const filename =
+//
+//        `${date}_${number}.json`;
+const filename =
 
-    const filename =
-
-        `${date}_${number}.json`;
-
+    `${date}_${String(number).padStart(3, "0")}.json`;
 
 
     const filePath =

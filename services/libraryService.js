@@ -1,64 +1,70 @@
 // =====================================================
-// folder : services
-// file   : libraryService.js
-// date   : 2026-08-04
-// author : OKIURA KAZUO
-// purpose: 大図書館 共通ファイル管理サービス
-// note   :
-//
-// ナザリック全体で利用する共通ライブラリ。
-// 大図書館への保存・読込・検索の土台となるサービス。
-//
-// 【現在実装】
-// ・フォルダ作成
-// ・JSON保存
-// ・JSON読込
-// ・ファイル一覧取得
-// ・自省録投稿番号取得
-//
-// 【今後実装予定】
-// ・Excel保存・読込
-// ・Excel行追加
-// ・Word保存
-// ・PDF保存
-// ・画像保存
-// ・index.db更新
-// ・全文検索
-//
+// file   : services/libraryService.js
+// purpose: ナザリック大図書館 共通ファイル管理サービス
+// storage: Dropbox
 // =====================================================
 
-const fs = require("fs");
-const path = require("path");
+require("dotenv").config();
 
-const {
+const { Dropbox } = require("dropbox");
 
-    LIBRARY_PATH,
-    DIARY_PATH,
-    MEMORY_PATH,
-    DOCUMENT_PATH,
-    IMAGE_PATH
-
-} = require("../config/library");
-
+const dbx = new Dropbox({
+    accessToken: process.env.DROPBOX_ACCESS_TOKEN
+});
 
 
 // =====================================================
-// フォルダ作成
+// Dropboxフォルダ作成
 //
-// フォルダが存在しない場合のみ作成する。
-// recursive:true により親フォルダも同時作成。
+// Dropboxでは、ファイルを保存するときに
+// 必要な親フォルダも自動的に作成されるため、
+// 基本的には何もしない。
 // =====================================================
 
-function ensureDir(dirPath){
+//function ensureDir(dirPath){
 
-    if(!fs.existsSync(dirPath)){
+//    return true;
 
-        fs.mkdirSync(
-            dirPath,
-            {
-                recursive:true
-            }
+//}
+
+
+// Dropbox上にフォルダを作成する
+async function ensureDir(dirPath){
+
+    try {
+
+        // Dropboxにフォルダを作成
+        await dbx.filesCreateFolderV2({
+            path: dirPath
+        });
+
+        // 作成成功
+        console.log(
+            "📁 Dropboxフォルダ作成:",
+            dirPath
         );
+
+    } catch(error) {
+
+        // すでに存在する場合は問題なし
+        const summary =
+            error?.error?.error_summary || "";
+
+        if(
+            summary.includes("conflict")
+        ){
+
+            console.log(
+                "📁 Dropboxフォルダ既存:",
+                dirPath
+            );
+
+        } else {
+
+            // その他のエラーは呼び出し元へ返す
+            throw error;
+
+        }
 
     }
 
@@ -68,132 +74,121 @@ function ensureDir(dirPath){
 
 // =====================================================
 // JSON保存
-//
-// filePath
-// 保存先フルパス
-//
-// data
-// 保存するオブジェクト
 // =====================================================
 
-function saveJson(
+async function saveJson(
     filePath,
     data
 ){
 
-    ensureDir(
-        path.dirname(filePath)
-    );
+    await dbx.filesUpload({
 
-    fs.writeFileSync(
+        path: filePath,
 
-        filePath,
+        contents:
+            JSON.stringify(
+                data,
+                null,
+                2
+            ),
 
-        JSON.stringify(
-            data,
-            null,
-            2
-        ),
+        mode: {
+            ".tag": "overwrite"
+        }
 
-        "utf8"
-
-    );
+    });
 
 }
-
 
 
 // =====================================================
 // JSON読込
-//
-// filePath
-// 読み込むJSONファイル
 // =====================================================
 
-function loadJson(
+async function loadJson(
     filePath
 ){
 
-    if(
-        !fs.existsSync(filePath)
-    ){
+    const result =
+        await dbx.filesDownload({
 
-        return null;
+            path: filePath
 
-    }
+        });
 
-    return JSON.parse(
 
-        fs.readFileSync(
+    const contents =
+        result.result.fileBlob ||
+        result.result.fileBinary;
 
-            filePath,
 
-            "utf8"
+    const text =
+        Buffer
+            .from(contents)
+            .toString("utf8");
 
-        )
 
-    );
+    return JSON.parse(text);
 
 }
-
 
 
 // =====================================================
 // ファイル一覧取得
-//
-// dirPath
-// 対象フォルダ
-//
-// 戻り値
-// ファイル名配列
 // =====================================================
 
-function listFiles(
+async function listFiles(
     dirPath
 ){
 
-    if(
-        !fs.existsSync(dirPath)
-    ){
+    const result =
+        await dbx.filesListFolder({
 
-        return [];
+            path: dirPath
 
-    }
+        });
 
-    return fs.readdirSync(
-        dirPath
-    );
+
+    return result.result.entries
+        .filter(
+            entry =>
+                entry[".tag"] === "file"
+        )
+        .map(
+            entry =>
+                entry.name
+        );
 
 }
+
+
 // =====================================================
-// 自省録 次回投稿番号取得
-//
-// dirPath
-// 対象フォルダ
-//
-// date
-// YYYY-MM-DD
-//
-// 戻り値
-// 次回投稿番号（1から開始）
-//
-// 例
-//
-// 2026-08-04_001.json
-// 2026-08-04_002.json
-//
-// → 3 を返す
+// 自省録・文書番号取得
 // =====================================================
 
-function getNextDiaryNumber(
+async function getNextDiaryNumber(
     dirPath,
     date
 ){
 
-    ensureDir(dirPath);
+    let files = [];
 
-    const files =
-        listFiles(dirPath);
+    try {
+
+        files =
+            await listFiles(
+                dirPath
+            );
+
+    } catch(error) {
+
+        // フォルダが存在しない場合
+        // 最初の番号として扱う
+
+        return 1;
+
+    }
+
 
     const targetFiles =
         files.filter(
@@ -260,6 +255,57 @@ function getNextDiaryNumber(
 }
 
 
+// =====================================================
+// 大図書館パス
+// =====================================================
+
+const LIBRARY_PATH =
+    "/大図書館";
+
+const DIARY_PATH =
+    "/大図書館/自省録";
+
+const MEMORY_PATH =
+    "/大図書館/記憶";
+
+const DOCUMENT_PATH =
+    "/大図書館/書庫/文書";
+
+const IMAGE_PATH =
+    "/大図書館/画像";
+
+// =====================================================
+// 大図書館 基本フォルダ作成
+// =====================================================
+
+async function ensureLibraryFolders(){
+
+    // 大図書館の基本フォルダ一覧
+    const folders = [
+
+        "/大図書館",
+        "/大図書館/書庫",
+        "/大図書館/書庫/文書",
+        "/大図書館/書庫/小説",
+        "/大図書館/書庫/小説/オーバーロード",
+        "/大図書館/書庫/小説/銀河英雄伝説",
+        "/大図書館/画像",
+        "/大図書館/記憶"
+
+    ];
+
+    // フォルダを順番に作成
+    for(
+        const folder of folders
+    ){
+
+        await ensureDir(
+            folder
+        );
+
+    }
+
+}
 
 // =====================================================
 // Export
@@ -278,6 +324,8 @@ module.exports = {
     IMAGE_PATH,
 
     ensureDir,
+
+    ensureLibraryFolders,
 
     saveJson,
 
