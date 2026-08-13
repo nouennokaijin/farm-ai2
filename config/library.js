@@ -1,60 +1,80 @@
-// ========================================
-// 📁 フォルダ名：config
-// 📄 ファイル名：library.js
-// 📅 日付：2026-08-12
-// 📝 概要：ナザリック大図書館の保存先・フォルダ構成を一元管理する設定ファイル
-// 👤 OKIURA KAZUO
-// ========================================
-
 const path = require("path");
 
 // ========================================
-// 📚 大図書館ルート
+// 大図書館
 // ========================================
 
-// Dropbox上の大図書館ルート
-const LIBRARY_PATH = "/大図書館";
+const LIBRARY_PATH = "/storage/emulated/0/大図書館";
 
 // ========================================
-// 📂 各フォルダ
+// フォルダ
 // ========================================
 
-// 思考録の保存先
-const DIARY_PATH = path.join(LIBRARY_PATH, "自省録");
+// 自省録の保存先
+const DIARY_PATH = path.join(
+  LIBRARY_PATH,
+  "書庫",
+  "自省録"
+);
 
 // 記憶の保存先
-const MEMORY_PATH = path.join(LIBRARY_PATH, "記憶");
+const MEMORY_PATH = path.join(
+  LIBRARY_PATH,
+  "記憶"
+);
 
 // 書庫の保存先
-const ARCHIVE_PATH = path.join(LIBRARY_PATH, "書庫");
+const ARCHIVE_PATH = path.join(
+  LIBRARY_PATH,
+  "書庫"
+);
 
 // 文書の保存先
-const DOCUMENT_PATH = path.join(ARCHIVE_PATH, "文書");
+const DOCUMENT_PATH = path.join(
+  ARCHIVE_PATH,
+  "文書"
+);
 
 // 画像の保存先
-const IMAGE_PATH = path.join(LIBRARY_PATH, "画像");
-
-// 小説の保存先
-const NOVEL_PATH = path.join(ARCHIVE_PATH, "小説");
-
-// オーバーロードの保存先
-const OVERLORD_PATH = path.join(NOVEL_PATH, "オーバーロード");
-
-// 銀河英雄伝説の保存先
-const GINEIDEN_PATH = path.join(NOVEL_PATH, "銀河英雄伝説");
+const IMAGE_PATH = path.join(
+  LIBRARY_PATH,
+  "画像"
+);
 
 // ========================================
-// 🗄️ Database
+// 小説
 // ========================================
 
-// 文書データベースの保存先
-const DOCUMENT_DB = path.join(__dirname, "../library/document/document.db");
+const NOVEL_PATH = path.join(
+  ARCHIVE_PATH,
+  "小説"
+);
+
+// オーバーロード
+const OVERLORD_PATH = path.join(
+  NOVEL_PATH,
+  "オーバーロード"
+);
+
+// 銀河英雄伝説
+const GINEIDEN_PATH = path.join(
+  NOVEL_PATH,
+  "銀河英雄伝説"
+);
 
 // ========================================
-// 📦 Export
+// Database
 // ========================================
 
-// 他のプログラムから利用する設定を公開
+const DOCUMENT_DB = path.join(
+  __dirname,
+  "../library/document/document.db"
+);
+
+// ========================================
+// Export
+// ========================================
+
 module.exports = {
   LIBRARY_PATH,
   DIARY_PATH,
