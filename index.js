@@ -28,6 +28,8 @@ const http = require("http");
 const express = require("express");
 const path = require("path");
 
+const { spawn } = require("child_process");
+
 const talkRouter =
 require("./server/routes/talk");
 
@@ -66,6 +68,37 @@ console.error(err);
 // 🤖 Discord Gateway 起動
 // ========================================
 safeStart("Discord Gateway", "./index.discord.js");
+
+// ========================================
+// 🌐 AQUOS mDNS 自動公開
+// ========================================
+console.log("=================================");
+console.log("🟡 Starting AQUOS mDNS...");
+console.log("=================================");
+
+const mdnsProcess = spawn(
+    "python",
+    ["/data/data/com.termux/files/home/aquos_mdns.py"],
+    {
+        stdio: ["ignore", "pipe", "pipe"]
+    }
+);
+
+mdnsProcess.stdout.on("data", (data) => {
+    console.log(`📡 mDNS: ${data.toString().trim()}`);
+});
+
+mdnsProcess.stderr.on("data", (data) => {
+    console.error(`❌ mDNS: ${data.toString().trim()}`);
+});
+
+mdnsProcess.on("error", (err) => {
+    console.error("❌ mDNS起動エラー:", err);
+});
+
+mdnsProcess.on("exit", (code) => {
+    console.log(`📡 mDNS終了 code=${code}`);
+});
 
 // ========================================
 // 📁 静的ファイル配信設定
@@ -159,7 +192,10 @@ time: new Date().toISOString(),
 // ========================================
 // 🚀 Web Server 起動
 // ========================================
-app.listen(PORT, () => {
+// app.listen(PORT, () => {
+
+app.listen(PORT, "0.0.0.0", () => {
+
 console.log("=================================");
 console.log(`🌐 Web Server running on port ${PORT}`);
 console.log("🌐 Unified Web : /");
@@ -173,6 +209,23 @@ console.log("=================================");
 console.log("=================================");
 console.log("🎉 ALL GATEWAYS READY");
 console.log("=================================");
+
+// ========================================
+// 🛑 終了時にAQUOS mDNSも停止
+// ========================================
+function shutdown() {
+    console.log("🛑 AI GATEWAY shutting down...");
+
+    if (mdnsProcess && !mdnsProcess.killed) {
+        mdnsProcess.kill("SIGTERM");
+        console.log("📡 AQUOS mDNS stopped");
+    }
+
+    process.exit(0);
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 
 // ========================================
 // 💓 生存監視（Heartbeat）
