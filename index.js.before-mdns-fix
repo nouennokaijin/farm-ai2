@@ -72,39 +72,33 @@ safeStart("Discord Gateway", "./index.discord.js");
 // ========================================
 // 🌐 AQUOS mDNS 自動公開
 // ========================================
-let mdnsProcess = null;
+console.log("=================================");
+console.log("🟡 Starting AQUOS mDNS...");
+console.log("=================================");
 
-if (process.env.AQUOS_MDNS === "true") {
-    console.log("=================================");
-    console.log("🟡 Starting AQUOS mDNS...");
-    console.log("=================================");
+const mdnsProcess = spawn(
+    "python",
+    ["/data/data/com.termux/files/home/aquos_mdns.py"],
+    {
+        stdio: ["ignore", "pipe", "pipe"]
+    }
+);
 
-    mdnsProcess = spawn(
-        "python",
-        ["/data/data/com.termux/files/home/aquos_mdns.py"],
-        {
-            stdio: ["ignore", "pipe", "pipe"]
-        }
-    );
+mdnsProcess.stdout.on("data", (data) => {
+    console.log(`📡 mDNS: ${data.toString().trim()}`);
+});
 
-    mdnsProcess.stdout.on("data", (data) => {
-        console.log(`📡 mDNS: ${data.toString().trim()}`);
-    });
+mdnsProcess.stderr.on("data", (data) => {
+    console.error(`❌ mDNS: ${data.toString().trim()}`);
+});
 
-    mdnsProcess.stderr.on("data", (data) => {
-        console.error(`❌ mDNS: ${data.toString().trim()}`);
-    });
+mdnsProcess.on("error", (err) => {
+    console.error("❌ mDNS起動エラー:", err);
+});
 
-    mdnsProcess.on("error", (err) => {
-        console.error("❌ mDNS起動エラー:", err);
-    });
-
-    mdnsProcess.on("exit", (code) => {
-        console.log(`📡 mDNS終了 code=${code}`);
-    });
-} else {
-    console.log("🟢 AQUOS mDNS: disabled");
-}
+mdnsProcess.on("exit", (code) => {
+    console.log(`📡 mDNS終了 code=${code}`);
+});
 
 // ========================================
 // 📁 静的ファイル配信設定
