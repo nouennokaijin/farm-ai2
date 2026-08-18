@@ -81,7 +81,7 @@ if (process.env.AQUOS_MDNS === "true") {
 
     mdnsProcess = spawn(
         "python",
-        ["/data/data/com.termux/files/home/aquos_mdns.py"],
+        ["/data/data/com.termux/files/home/farm-ai2/aquos_mdns.py"],
         {
             stdio: ["ignore", "pipe", "pipe"]
         }
