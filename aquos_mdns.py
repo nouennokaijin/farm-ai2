@@ -17,7 +17,7 @@
 #   zeroconf
 #
 # 起動:
-#   python ~/aquos_mdns.py
+#   python ~/farm-ai2/aquos_mdns.py
 #
 # 備考:
 # farm-ai2 の index.js から自動起動する。
