@@ -6,9 +6,9 @@
 # 🌐 AQUOS mDNS 自動公開
 #
 # 概要:
-# AQUOSの現在のIPアドレスを取得し、
-# mDNSを使って「aquos.local」という名前で
-# Webサーバーをネットワーク上に公開する。
+# AQUOSの現在のIPアドレスを定期的に確認し、
+# IPアドレスが変わった場合はmDNSを更新して
+# 「aquos.local」という名前でWebサーバーを公開する。
 #
 # 公開先:
 #   http://aquos.local:10000
@@ -16,80 +16,108 @@
 # 使用ライブラリ:
 #   zeroconf
 #
-# 起動:
-#   python ~/farm-ai2/aquos_mdns.py
-#
 # 備考:
 # farm-ai2 の index.js から自動起動する。
 # ========================================
 
 import socket
+import subprocess
 import time
 
 from zeroconf import Zeroconf, ServiceInfo
 
 
 # ========================================
-# 🌐 AQUOSのIPアドレスを取得
-# ========================================
-# 外部へ通信できるソケットを一時的に作り、
-# 現在使用しているネットワークのIPアドレスを取得する。
+# 🌐 AQUOSの現在IPアドレスを取得
 # ========================================
 
-s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+def get_ip():
+    # wlan0のIPv4アドレスを取得する。
+    result = subprocess.check_output(
+        ["sh", "-c", "ip addr show wlan0 | grep 'inet '"],
+        stderr=subprocess.DEVNULL
+    ).decode().strip()
 
-s.connect(("8.8.8.8", 80))
-
-ip = s.getsockname()[0]
-
-s.close()
-
-
-print(f"AQUOS IP : {ip}")
-print("mDNS    : aquos.local")
+    # IPv4アドレスだけを取り出す。
+    return result.split()[1].split("/")[0]
 
 
 # ========================================
-# 📡 mDNSサービス情報を作成
-# ========================================
-# AQUOSのWebサーバーを
-# 「aquos.local:10000」として公開する。
+# 📡 mDNSサービスを作成
 # ========================================
 
-info = ServiceInfo(
-    "_http._tcp.local.",
-    "AQUOS Web._http._tcp.local.",
-    addresses=[socket.inet_aton(ip)],
-    port=10000,
-    properties={"path": "/"},
-    server="aquos.local.",
-)
+def create_service(ip):
+    # 現在のIPアドレスでmDNSサービス情報を作成する。
+    return ServiceInfo(
+        "_http._tcp.local.",
+        "AQUOS Web._http._tcp.local.",
+        addresses=[socket.inet_aton(ip)],
+        port=10000,
+        properties={"path": "/"},
+        server="aquos.local.",
+    )
 
 
 # ========================================
-# 🚀 mDNSサービス開始
+# 🚀 mDNS開始
 # ========================================
 
 zeroconf = Zeroconf()
 
-zeroconf.register_service(info)
+current_ip = None
+current_info = None
 
-
-print("aquos.local を公開しました")
-print("停止: Ctrl+C")
-
-
-# ========================================
-# 💓 mDNSサービス維持
-# ========================================
-# プログラムが終了するまで、
-# mDNSによる公開を維持する。
-# ========================================
 
 try:
 
+    # ========================================
+    # 💓 IPアドレス監視
+    # ========================================
+
     while True:
-        time.sleep(1)
+
+        # 現在のIPアドレスを取得する。
+        try:
+            new_ip = get_ip()
+        except Exception as e:
+            print(f"❌ IP取得エラー: {e}", flush=True)
+            time.sleep(5)
+            continue
+
+        # ========================================
+        # 🔄 IPアドレス変更を検知
+        # ========================================
+
+        if new_ip != current_ip:
+
+            # 現在のIPアドレスを表示する。
+            print(f"🌐 AQUOS IP : {new_ip}", flush=True)
+
+            # 以前のmDNS登録がある場合は解除する。
+            if current_info is not None:
+                try:
+                    zeroconf.unregister_service(current_info)
+                    print("🔄 旧mDNS登録を解除しました", flush=True)
+                except Exception as e:
+                    print(f"⚠️ 旧mDNS解除エラー: {e}", flush=True)
+
+            # 新しいIPでmDNSサービスを作成する。
+            current_info = create_service(new_ip)
+
+            # 新しいIPでmDNSを登録する。
+            zeroconf.register_service(current_info)
+
+            # 現在のIPを記録する。
+            current_ip = new_ip
+
+            # 更新完了を表示する。
+            print(
+                f"📡 aquos.local を {new_ip} に更新しました",
+                flush=True
+            )
+
+        # 5秒ごとにIPアドレスを確認する。
+        time.sleep(5)
 
 
 # ========================================
@@ -98,10 +126,16 @@ try:
 
 except KeyboardInterrupt:
 
-    print("🛑 AQUOS mDNSを停止します")
+    print("🛑 AQUOS mDNSを停止します", flush=True)
 
-    zeroconf.unregister_service(info)
+    # mDNS登録を解除する。
+    if current_info is not None:
+        try:
+            zeroconf.unregister_service(current_info)
+        except Exception:
+            pass
 
+    # Zeroconfを終了する。
     zeroconf.close()
 
-    print("📡 AQUOS mDNS停止完了")
+    print("📡 AQUOS mDNS停止完了", flush=True)
